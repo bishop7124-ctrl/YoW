@@ -255,6 +255,17 @@ Still open before freeze (all need the owner; none can be done from the cloud):
 
 **All other "Beta" wording removed (owner request 2026-10-28):** the Beta watermark beside the logo, per-project-type Beta tags and the Script/Comic beta labels, "beta build" wording on Download/Pricing (now "The current build isn't yet notarized/signed"), and the Beta Disclaimer (renamed Launch Notice in footers, menus, modal and `/beta-disclaimer/`; URL kept so links and the sitemap still work). Only the "Beta is closing - live launch from 2 November 2026" notices remain, plus the status labels shown to existing beta testers inside Account Settings (Beta tester / Cloud Mode during beta / Beta notice), which describe their own access and notice period. Help Centre articles and the launch email still say Beta (not shipped in the app).
 
+### 2026-10-30 rehearsal day (Payments & release)
+
+Status: **In progress.** Automated side green; the real-world rehearsal steps are the owner's. Run by the daily routine in the cloud sandbox. No 29 Oct freeze/go-no-go record exists in the repo, so RC1 is frozen at `main` `7084940` (no commits since the 28 Oct merge) and the go/no-go is taken on 31 Oct once the rehearsal below is recorded.
+
+Evidence (`main` `7084940`, nothing code-changed today):
+- CI: QA push run 974 green and the scheduled QA run 975 (29 Oct) green, which includes the `Secret scan` job that was red on 963/966/968 (closed by the owner-approved `.gitleaksignore` entries).
+- Sandbox: lint 0 errors (133 warnings); typecheck OK; load check 253 files; e2e matrix 59/59; api ESM 12/12; build OK; bundle budget passed (entry 551.7 KB gzip, JS 926.0 KB, CSS 82.4 KB); unit tests 1,798 pass / 1 fail. The one failure is the known sandbox-only WinAnsi defect (`projectExportTextFidelity.test.js`, container Node `TextDecoder('windows-1252')`); CI Node passes it.
+- Production edge check (`scripts/check-production-edge.mjs`): 22/22 pass, 0 fail.
+- Checkout-disable proof (runbook step 4, live site, read-only): `POST /api/create-checkout-session` returns HTTP 403 `{"code":"checkout_closed"}`; `GET /api/get-founder-slots` returns `"checkoutOpen":false`, 100 of 100 places remaining, 0 held. Checkout is closed.
+- Not done (needs the owner): backup restore test (LAUNCH_CHECKLIST T-2), Vercel rollback rehearsal, live Stripe key swap and live config review (O12), support-procedure walk-through. These stay Not started/In progress until the owner reports them.
+
 ### Sprint alignment — 1 Oct to 2 Nov 2026
 
 Status: **Active — re-planned 2026-09-30 by owner request (start 1 Oct, Codex days through 6 Oct finished).** This section is the canonical day-by-day schedule for the November launch sprint and is what the daily Claude routine reads. It maps every open Launch Readiness Gate item to a day. Launch stays Sun 1 Nov (quiet) / Mon 2 Nov (public). **Pulled forward one day on 7 Oct (owner request): every day from the old 8 Oct onward moved one day earlier; the old 8 Oct work was merged into 7 Oct; 24-28 Oct and the new 31 Oct are buffer days for repairs.**
