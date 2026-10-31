@@ -266,6 +266,17 @@ Evidence (`main` `7084940`, nothing code-changed today):
 - Checkout-disable proof (runbook step 4, live site, read-only): `POST /api/create-checkout-session` returns HTTP 403 `{"code":"checkout_closed"}`; `GET /api/get-founder-slots` returns `"checkoutOpen":false`, 100 of 100 places remaining, 0 held. Checkout is closed.
 - Not done (needs the owner): backup restore test (LAUNCH_CHECKLIST T-2), Vercel rollback rehearsal, live Stripe key swap and live config review (O12), support-procedure walk-through. These stay Not started/In progress until the owner reports them.
 
+### 2026-10-31 buffer day (final buffer, pre-launch)
+
+Status: **In progress — launch verdict still RED/NOT YET GO until the owner-side items below are reported.** Run by the daily routine in the cloud sandbox. No code changed today; RC1 stays `main` `7084940`.
+
+Evidence:
+- `npm run qa` fully green in the sandbox: lint 0 errors (133 warnings); typecheck OK; unit tests **1,799 / 1,799 pass (184 files)** (the old sandbox-only WinAnsi failure is gone after the explicit-table fix); build OK; bundle budget passed (entry 551.7 KB gzip, JS 926.0 KB, CSS 82.4 KB); load check, e2e matrix and api ESM 12/12 OK.
+- CI: scheduled QA run 976 (30 Oct, `main` `7084940`) green; no newer commits on `main`.
+- Production edge check (`scripts/check-production-edge.mjs`): 0 failed. Checkout-disable proof (read-only): `POST /api/create-checkout-session` returns 403 `checkout_closed`; `GET /api/get-founder-slots` shows `checkoutOpen:false`, 100 of 100 remaining. Checkout is closed.
+- Playwright was not re-run in the sandbox (CI is the source).
+- Still owner-only and unreported: backup restore test (LAUNCH_CHECKLIST T-2), Vercel rollback rehearsal, live Stripe setup and live config review (O12), support walk-through, beta-migration SQL run, announcement batches 2-3, secret-scan-free decision already closed. 1 Nov deploy/checkout enablement stays with the owner.
+
 ### Sprint alignment — 1 Oct to 2 Nov 2026
 
 Status: **Active — re-planned 2026-09-30 by owner request (start 1 Oct, Codex days through 6 Oct finished).** This section is the canonical day-by-day schedule for the November launch sprint and is what the daily Claude routine reads. It maps every open Launch Readiness Gate item to a day. Launch stays Sun 1 Nov (quiet) / Mon 2 Nov (public). **Pulled forward one day on 7 Oct (owner request): every day from the old 8 Oct onward moved one day earlier; the old 8 Oct work was merged into 7 Oct; 24-28 Oct and the new 31 Oct are buffer days for repairs.**
