@@ -266,6 +266,8 @@ Evidence (`main` `7084940`, nothing code-changed today):
 - Checkout-disable proof (runbook step 4, live site, read-only): `POST /api/create-checkout-session` returns HTTP 403 `{"code":"checkout_closed"}`; `GET /api/get-founder-slots` returns `"checkoutOpen":false`, 100 of 100 places remaining, 0 held. Checkout is closed.
 - Not done (needs the owner): backup restore test (LAUNCH_CHECKLIST T-2), Vercel rollback rehearsal, live Stripe key swap and live config review (O12), support-procedure walk-through. These stay Not started/In progress until the owner reports them.
 
+**Owner update 2026-10-30 (evening, owner-reported, no screenshots):** O12 (Stripe live readiness review, names only) done; backup restore test done; Vercel rollback check done (Instant Rollback available, `CHECKOUT_OPEN` not `true`). The restore time and possible-data-loss numbers were not given; ask for them to complete LAUNCH_CHECKLIST T-2. Decisions confirmed: D1 keep `?` plus warning for non-Latin PDF text; D2 Tailwind 4 after launch; D3 accept that replaced images are kept. Checkout still off.
+
 ### Sprint alignment — 1 Oct to 2 Nov 2026
 
 Status: **Active — re-planned 2026-09-30 by owner request (start 1 Oct, Codex days through 6 Oct finished).** This section is the canonical day-by-day schedule for the November launch sprint and is what the daily Claude routine reads. It maps every open Launch Readiness Gate item to a day. Launch stays Sun 1 Nov (quiet) / Mon 2 Nov (public). **Pulled forward one day on 7 Oct (owner request): every day from the old 8 Oct onward moved one day earlier; the old 8 Oct work was merged into 7 Oct; 24-28 Oct and the new 31 Oct are buffer days for repairs.**
@@ -376,7 +378,7 @@ Rules:
 | O10 | Firefox and Safari passes at phone/tablet/desktop widths plus a VoiceOver and keyboard-only run. Runs inside the 17 Oct device blocks. | Firefox, Safari, VoiceOver | 90 | 2026-10-17 | 2026-10-17 | No | Not started - packet prepared 17 Oct (see QA_PLAN) |
 | O07 | Your own OpenRouter and OpenAI keys (never pasted into chat): DM/GM framing, key isolation across two accounts, context controls. Runs inside the 18-19 Oct owner blocks. Other providers are not tested. | Your AI key + two test accounts | 60 | 2026-10-18 | 2026-10-19 | Yes | Done 19 Oct - owner reported all steps passed (owner-reported, no screenshot evidence). |
 | O11 | Search Console: confirm the sitemap is read after deploy and request indexing for the key pages. | Search Console | 10 | 2026-10-23 | 2026-10-25 | No | Not started |
-| O12 | Stripe and Vercel dashboards (guided, names only): confirm live keys/prices/webhook events are ready for launch, without a purchase. | Stripe + Vercel dashboards | 30 | 2026-10-24 | 2026-10-28 | Yes | Not started |
+| O12 | Stripe and Vercel dashboards (guided, names only): confirm live keys/prices/webhook events are ready for launch, without a purchase. | Stripe + Vercel dashboards | 30 | 2026-10-24 | 2026-10-28 | Yes | Done 30 Oct (owner-reported, no screenshots) |
 | O13 | Vercel: confirm the Beta-close setting exists (name only, do not enable it yet) and approve the Beta-close timestamp plan. | Vercel dashboard (guided) | 10 | 2026-10-24 | 2026-10-28 | Yes | Not started |
 | O15 | After deploy on 1 Nov: open the live site DevTools and confirm headers, the www redirect, and one Founder slot display. | Production site (guided) | 15 | 2026-11-01 | 2026-11-01 | Yes | Not started |
 
