@@ -293,6 +293,14 @@ Evidence:
 
 **Owner update 2026-10-30 (evening, owner-reported, no screenshots):** O12 (Stripe live readiness review, names only) done; backup restore test done; Vercel rollback check done (Instant Rollback available, `CHECKOUT_OPEN` not `true`). The restore time and possible-data-loss numbers were not given; ask for them to complete LAUNCH_CHECKLIST T-2. Decisions confirmed: D1 keep `?` plus warning for non-Latin PDF text; D2 Tailwind 4 after launch; D3 accept that replaced images are kept. Checkout still off.
 
+### 2026-11-01 quiet release day (verification and go/no-go; no deploy, no checkout change by the routine)
+
+Status: **In progress — technical verdict GO for the owner to open checkout quietly, conditional on the owner-only steps below; nothing was deployed, enabled or published by the routine (1-2 Nov rule).** Merged the 29/30/31 Oct docs-only records from the earlier daily-run branches (`jhviaz`, `f7i1vo`, `w3favz`) first; RC1 is still `main` `7084940` (no newer commits).
+
+Evidence (sandbox, 1 Nov): `npm run qa` green: lint 0 errors (133 warnings), unit tests **1,799 / 1,799 (184 files)**, build, budget, load check, e2e matrix, api ESM. CI: scheduled QA run 977 (31 Oct) green on `7084940`. Live read-only checks on `www.yourownworld.co.uk`: `scripts/check-production-edge.mjs` **22/22 pass**; `POST /api/create-checkout-session` 403 `checkout_closed`; `GET /api/get-founder-slots` `checkoutOpen:false`, 100 of 100 places; `POST /api/register-paid-interest` 403 `beta_closed` (so #263 is deployed). Playwright not re-run in the sandbox (CI is the source).
+
+Still owner-only (none can be done from the cloud): (1) record restore time and possible data loss for LAUNCH_CHECKLIST T-2; (2) run `docs/sql/move-active-accounts-to-beta.sql` preview and migration (its step 5, the notice stamp, only on 2 Nov); (3) announcement batches 2-3; (4) set `CHECKOUT_OPEN=true` in Vercel, redeploy, confirm `checkoutOpen:true`, then one real purchase plus refund (PAYMENT_ROADMAP runbook step 6; a Founding purchase takes one of 100 places); (5) O15 post-deploy header/redirect/Founder-slot check. Rollback: delete `CHECKOUT_OPEN` and redeploy, or Vercel Instant Rollback. No advertising today.
+
 ### Sprint alignment — 1 Oct to 2 Nov 2026
 
 Status: **Active — re-planned 2026-09-30 by owner request (start 1 Oct, Codex days through 6 Oct finished).** This section is the canonical day-by-day schedule for the November launch sprint and is what the daily Claude routine reads. It maps every open Launch Readiness Gate item to a day. Launch stays Sun 1 Nov (quiet) / Mon 2 Nov (public). **Pulled forward one day on 7 Oct (owner request): every day from the old 8 Oct onward moved one day earlier; the old 8 Oct work was merged into 7 Oct; 24-28 Oct and the new 31 Oct are buffer days for repairs.**
