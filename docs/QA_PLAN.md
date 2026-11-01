@@ -1132,3 +1132,7 @@ Owner re-test (after the web deploy, about 15 min, test account): re-import `1-n
 ### 2026-10-29 RC1 freeze automated check
 
 Candidate `7084940`: CI QA run 974 green; local lint 0 errors, unit tests 1,798/1,799 (the one failure is the known sandbox-only `windows-1252` decoder defect, CI passes), build, bundle budget (entry 551.7 KB gzip), load check, e2e matrix 59/59 and api ESM 12/12 pass. Required before 1 Nov: next scheduled QA run shows `Secret scan` green; rerun full gate on any launch-blocker repair. See `docs/ROADMAP.md` "2026-10-29 RC1 freeze review".
+
+## 2026-10-31 final buffer-day gate rerun
+
+`npm run qa` green in the sandbox on `main` `7084940`: 1,799/1,799 unit tests, lint 0 errors, build, bundle budget (entry 551.7 KB gzip), load check, e2e matrix, api ESM 12/12. Production edge check 0 failures; checkout confirmed closed (403 `checkout_closed`, `checkoutOpen:false`). CI scheduled run 976 green. Owner-side T-2 backup restore, rollback rehearsal and live Stripe review remain unreported.

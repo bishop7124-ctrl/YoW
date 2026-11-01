@@ -269,6 +269,28 @@ Gate view for the freeze: Project-type, Data safety, Export ownership, Marketing
 
 Single next action for RC1: owner does Stripe live setup and key swap with `CHECKOUT_OPEN` unset, then the closed-state curl proof (runbook steps 2-4). Do not set `CHECKOUT_OPEN=true` before 1 Nov. Freeze rule from now: only launch-blocker repairs go to `main`.
 
+### 2026-10-30 rehearsal day (Payments & release)
+
+Status: **In progress.** Automated side green; the real-world rehearsal steps are the owner's. Run by the daily routine in the cloud sandbox. No 29 Oct freeze/go-no-go record exists in the repo, so RC1 is frozen at `main` `7084940` (no commits since the 28 Oct merge) and the go/no-go is taken on 31 Oct once the rehearsal below is recorded.
+
+Evidence (`main` `7084940`, nothing code-changed today):
+- CI: QA push run 974 green and the scheduled QA run 975 (29 Oct) green, which includes the `Secret scan` job that was red on 963/966/968 (closed by the owner-approved `.gitleaksignore` entries).
+- Sandbox: lint 0 errors (133 warnings); typecheck OK; load check 253 files; e2e matrix 59/59; api ESM 12/12; build OK; bundle budget passed (entry 551.7 KB gzip, JS 926.0 KB, CSS 82.4 KB); unit tests 1,798 pass / 1 fail. The one failure is the known sandbox-only WinAnsi defect (`projectExportTextFidelity.test.js`, container Node `TextDecoder('windows-1252')`); CI Node passes it.
+- Production edge check (`scripts/check-production-edge.mjs`): 22/22 pass, 0 fail.
+- Checkout-disable proof (runbook step 4, live site, read-only): `POST /api/create-checkout-session` returns HTTP 403 `{"code":"checkout_closed"}`; `GET /api/get-founder-slots` returns `"checkoutOpen":false`, 100 of 100 places remaining, 0 held. Checkout is closed.
+- Not done (needs the owner): backup restore test (LAUNCH_CHECKLIST T-2), Vercel rollback rehearsal, live Stripe key swap and live config review (O12), support-procedure walk-through. These stay Not started/In progress until the owner reports them.
+
+### 2026-10-31 buffer day (final buffer, pre-launch)
+
+Status: **In progress — launch verdict still RED/NOT YET GO until the owner-side items below are reported.** Run by the daily routine in the cloud sandbox. No code changed today; RC1 stays `main` `7084940`.
+
+Evidence:
+- `npm run qa` fully green in the sandbox: lint 0 errors (133 warnings); typecheck OK; unit tests **1,799 / 1,799 pass (184 files)** (the old sandbox-only WinAnsi failure is gone after the explicit-table fix); build OK; bundle budget passed (entry 551.7 KB gzip, JS 926.0 KB, CSS 82.4 KB); load check, e2e matrix and api ESM 12/12 OK.
+- CI: scheduled QA run 976 (30 Oct, `main` `7084940`) green; no newer commits on `main`.
+- Production edge check (`scripts/check-production-edge.mjs`): 0 failed. Checkout-disable proof (read-only): `POST /api/create-checkout-session` returns 403 `checkout_closed`; `GET /api/get-founder-slots` shows `checkoutOpen:false`, 100 of 100 remaining. Checkout is closed.
+- Playwright was not re-run in the sandbox (CI is the source).
+- Still owner-only and unreported: backup restore test (LAUNCH_CHECKLIST T-2), Vercel rollback rehearsal, live Stripe setup and live config review (O12), support walk-through, beta-migration SQL run, announcement batches 2-3, secret-scan-free decision already closed. 1 Nov deploy/checkout enablement stays with the owner.
+
 ### Sprint alignment — 1 Oct to 2 Nov 2026
 
 Status: **Active — re-planned 2026-09-30 by owner request (start 1 Oct, Codex days through 6 Oct finished).** This section is the canonical day-by-day schedule for the November launch sprint and is what the daily Claude routine reads. It maps every open Launch Readiness Gate item to a day. Launch stays Sun 1 Nov (quiet) / Mon 2 Nov (public). **Pulled forward one day on 7 Oct (owner request): every day from the old 8 Oct onward moved one day earlier; the old 8 Oct work was merged into 7 Oct; 24-28 Oct and the new 31 Oct are buffer days for repairs.**
