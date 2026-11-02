@@ -30,7 +30,6 @@ import FAQPage from './components/faq/FAQPage'
 import FoundersPage from './components/founders/FoundersPage'
 import DownloadPage from './components/download/DownloadPage'
 import FounderProfilePage from './components/founders/FounderProfilePage'
-import { FloatingSupportLink } from './components/marketing/SupportDevelopmentLink'
 import {
   STORAGE_MODES,
   clearDesktopLapseSnapshot,
@@ -1811,7 +1810,6 @@ export default function App() {
     <ErrorBoundary>
       <AuthProvider>
         <AppInner />
-        <FloatingSupportLink />
         <Analytics />
       </AuthProvider>
     </ErrorBoundary>

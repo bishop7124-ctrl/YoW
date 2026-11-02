@@ -14,7 +14,6 @@ import RecordConflictReview from '../shared/RecordConflictReview'
 import StorageCard from './StorageCard'
 import { PAID_ACCESS_SOON_LABEL, greyedPaidButtonStyle } from '../../constants/launch'
 import { getCookieConsent, setCookieConsent } from '../../utils/cookieConsent'
-import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 import { PROVIDERS, NAMED_OPENAI_ENDPOINTS, UNTESTED_PROVIDER_LABEL, UNTESTED_PROVIDER_NOTE, isTestedAiProvider, fetchLiveModels } from '../../utils/aiApi'
 import { getAiModelGuidance, getAvailableOpenAiQuickChoices, isOfficialOpenAiEndpoint } from '../../utils/aiModelGuidance'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings, saveAiSettings } from '../../utils/aiSettings'
@@ -3440,10 +3439,6 @@ export default function AccountSettings({
                 View full pricing page →
               </a>
             </div>}
-
-            <div style={{ marginTop: 18 }}>
-              <SupportDevelopmentLink variant="banner" />
-            </div>
 
             {billingMessage && <p className="account-success">{billingMessage}</p>}
             {billingError && <p className="account-error">{billingError}</p>}

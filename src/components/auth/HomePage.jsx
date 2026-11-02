@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import MarketingNav from '../marketing/MarketingNav'
-import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 
 const PROJECT_TYPES = [
   {
@@ -943,7 +942,6 @@ export default function HomePage({ onOpenAbout, onOpenLegal }) {
               <button type="button" onClick={() => onOpenLegal('cookies')}  className="yow-footer-link">Cookies</button>
             </>
           )}
-          <SupportDevelopmentLink />
         </nav>
       </footer>
     </div>

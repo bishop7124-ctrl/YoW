@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 
 function AboutTab() {
   return (
@@ -96,10 +95,7 @@ export default function AboutPage({ open, onClose }) {
         {/* Footer */}
         <div style={{ padding: '10px 20px', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 12, flexWrap: 'wrap' }}>
           <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>© 2026 YourOwnWorld. All rights reserved.</p>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <a href="mailto:support@yourownworld.co.uk" style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }}>support@yourownworld.co.uk</a>
-            <SupportDevelopmentLink />
-          </div>
+          <a href="mailto:support@yourownworld.co.uk" style={{ fontSize: 11, color: 'var(--accent)', textDecoration: 'none' }}>support@yourownworld.co.uk</a>
         </div>
       </div>
     </div>

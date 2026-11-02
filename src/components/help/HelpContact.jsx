@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { submitFeedback } from '../../utils/feedback'
-import { HELP_CENTRE_URL } from '../../config/helpCentre'
 
 const fieldStyle = {
   width: '100%',
@@ -364,21 +363,6 @@ export default function HelpContact({ open, onClose }) {
             ✕
           </button>
         </div>
-
-        <a
-          href={HELP_CENTRE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-            padding: '12px 20px', background: 'var(--accent-fade)',
-            borderBottom: '1px solid var(--border)', textDecoration: 'none',
-            fontSize: 13, color: 'var(--text-main)',
-          }}
-        >
-          <span>Looking for a guide? <strong>Browse the Help Centre</strong></span>
-          <span aria-hidden="true" style={{ color: 'var(--accent-text, var(--accent))' }}>↗</span>
-        </a>
 
         {/* Body */}
         <div style={{ padding: 24 }}>

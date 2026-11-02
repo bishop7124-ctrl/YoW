@@ -5,7 +5,6 @@ import { supabase } from '../../supabase'
 import { PAID_ACCESS_SOON_LABEL, greyedPaidButtonStyle } from '../../constants/launch'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
-import SupportDevelopmentLink from '../marketing/SupportDevelopmentLink'
 import { usePageMeta } from '../../utils/usePageMeta'
 import { isCheckoutOpen, usePublicAvailability } from '../../utils/checkoutAvailability'
 import './PricingPage.css'
@@ -212,7 +211,6 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
 
         <section className="pricing-philosophy" aria-labelledby="philosophy-heading"><p className="eyebrow">Built independently</p><h2 id="philosophy-heading">Buy YOW for what it is today. Enjoy what we add tomorrow.</h2><p>YOW was made because writing and worldbuilding became too complicated to keep scattered across documents, spreadsheets and apps. The aim is useful software writers can own—not another expensive subscription built on promises about a future roadmap.</p></section>
         <section className="pricing-faq" aria-labelledby="faq-heading"><p className="eyebrow">The details</p><h2 id="faq-heading">Frequently asked questions</h2>{FAQ.map((item, index) => <FaqItem key={item.q} item={item} open={openFaq === index} onToggle={() => setOpenFaq(openFaq === index ? null : index)} />)}</section>
-        <section className="pricing-support"><SupportDevelopmentLink variant="banner" /></section>
         <section className="pricing-final-cta"><h2>Your world is waiting.</h2><p>Start free. Upgrade when the way you work makes it worthwhile.</p><button type="button" className="btn btn-primary" onClick={onGetStarted}>Get started free</button></section>
       </main>
       <MarketingFooter />

@@ -2,8 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuth } from '../../context/AuthContext'
 import { UserMediaImage } from '../shared/UserMedia'
-import { HELP_CENTRE_URL } from '../../config/helpCentre'
-import { openExternalUrl } from '../../utils/externalLinks'
 
 function MenuIcon({ name }) {
   const common = {
@@ -180,10 +178,6 @@ export default function UserMenu({ onOpenAccount, onOpenHelp, onOpenLegal, onOpe
                     <span>Help and support</span>
                   </button>
                 )}
-                <button type="button" role="menuitem" onClick={() => { setOpen(false); openExternalUrl(HELP_CENTRE_URL) }} className="user-menu-item">
-                  <MenuIcon name="book" />
-                  <span>Help Centre</span>
-                </button>
                 {onOpenAbout && (
                   <button type="button" role="menuitem" onClick={() => { setOpen(false); onOpenAbout() }} className="user-menu-item">
                     <MenuIcon name="about" />

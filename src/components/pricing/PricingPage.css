@@ -66,7 +66,6 @@
 .pricing-faq-item { border-bottom: 1px solid var(--border); }
 .pricing-faq-item button { display: flex; width: 100%; justify-content: space-between; gap: 18px; padding: 19px 0; border: 0; background: none; color: var(--text-main); cursor: pointer; text-align: left; font-size: 15px; font-weight: 800; }
 .pricing-faq-item p { margin: -2px 0 20px; color: var(--text-muted); font-size: 14px; line-height: 1.75; }
-.pricing-support { max-width: 680px; margin: 0 auto; padding: 0 24px; }
 .pricing-final-cta { max-width: 620px; margin: 0 auto; padding: 72px 24px 112px; text-align: center; }
 .pricing-final-cta h2 { margin: 0 0 12px; font-size: clamp(1.8rem, 5vw, 3rem); }
 .pricing-final-cta p { margin: 0 0 26px; color: var(--text-muted); }
