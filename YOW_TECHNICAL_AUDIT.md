@@ -1,3 +1,167 @@
+# Independent remediation review — 23 October 2026
+
+**Verdict remains RED. Significant improvements are verified, but “every code-addressable finding fixed” is not supported by this review. More code changes are required; the remaining work is not limited to owner checks or applying migrations.**
+
+Reviewed HEAD: `09bb43d4cf3c26fa74f64136604bdc293c0473d1`. Compared against the original audit commit `a7c48d703cdef053091f6658e77d4c82b1500d24`. The checkout was clean at the start of review. The comparison covers 97 files, including audit documentation and unrelated intervening AI-import/chat improvements; review concentrated on the audit remediation and its persistence, recovery, payment, import/export and security boundaries.
+
+No application code, migrations, dependencies or deployment settings were changed by this review. No customer data or production services were accessed. This dated addendum updates the audit document only; the original assessment below is retained as historical evidence. Its source line numbers describe the old commit, whereas links in this addendum describe the reviewed HEAD. Roadmaps remain unchanged because this is an assessment, not implementation or closure of the recorded issues.
+
+## Main findings
+
+### REVIEW-01 — P1: Sign-out recovery bypasses scene conflict protection and can overwrite newer cloud prose
+
+**Confirmed by isolated reproduction R1 and source tracing. Reopens YOW-03/04. Commercial blocker.**
+
+At [src/App.jsx:1090](/Users/bishop/Desktop/Claude/yow/src/App.jsx:1090), an unsynced recovery copy is overlaid onto cloud data. [src/utils/dirtyRecords.js:68](/Users/bishop/Desktop/Claude/yow/src/utils/dirtyRecords.js:68) replaces a differing cloud scene with the local scene, but deliberately excludes scenes from the conflict list at line 71. That helper expects callers to save scenes through the revision-aware save path.
+
+This caller instead invokes `persistReviewedCloudSyncResume` at [src/App.jsx:1101](/Users/bishop/Desktop/Claude/yow/src/App.jsx:1101). That function performs **whole-account replacement** at [src/utils/cloudSyncResume.js:76](/Users/bishop/Desktop/Claude/yow/src/utils/cloudSyncResume.js:76), then verifies that the cloud matches the replacement. No scene base revision is checked. The recovery copy is cleared immediately afterwards.
+
+Reproduction: cloud scene revision 5 contains “newer remote prose”; the saved recovery copy contains “offline prose” based on revision 3. The actual overlay returns the local text and **zero scene conflicts**. The actual persistence helper sends that result to whole-account replacement. Verification confirms the overwrite rather than detecting it. External storage calls were synthetic; no real manuscript was changed.
+
+**Impact:** logging back in after offline sign-out can silently replace writing from another device. Whole-account replacement can also remove changes arriving between the initial read and replacement. The safer normal `useStore.importData` recovery route is bypassed in this specific flow.
+
+**Required repair:** send only dirty operations through the same revision/merge pipeline as ordinary saves, preserve both scene versions on conflict, and retain the recovery copy until every relevant operation is acknowledged. Do not use destructive account replacement for automatic sign-in recovery. Add an integrated App-level offline-sign-out → remote edit → sign-in test; helper tests alone missed this mismatch.
+
+### REVIEW-02 — P1: Sign-out still clears data when the recovery copy cannot be stored
+
+**Confirmed by isolated reproduction R2; asynchronous durability gap established by source. Reopens YOW-03. Commercial blocker.**
+
+[src/utils/storageMode.js:142](/Users/bishop/Desktop/Claude/yow/src/utils/storageMode.js:142) catches a synchronous storage failure and returns false. [src/App.jsx:1016](/Users/bishop/Desktop/Claude/yow/src/App.jsx:1016) ignores that return value, and calls `clearData` at line 1020 anyway. The store's account-change effect also clears local project storage at [src/store/useStore.js:852](/Users/bishop/Desktop/Claude/yow/src/store/useStore.js:852).
+
+For IndexedDB/native asynchronous backends, `writeItem` queues work; the helper's immediate `true` is not a durable transaction acknowledgement. The recovery copy and the deletion of the old copy are not one transaction whose failure preserves the original.
+
+Reproduction: the actual sign-out block was given a synthetic quota failure while writing the recovery copy. The helper returned false and the block still cleared project data. This is precisely a condition where the recovery copy may be the only protection for unsynced work.
+
+**Required repair:** make recovery preservation part of the account-transition storage transaction, before any local purge, and wait for its durable completion. If preservation fails, clear account visibility without deleting the only retained durable copy; provide an explicit recovery/export route. Test synchronous quota errors, asynchronous transaction aborts, shutdown during transition and session expiry.
+
+### REVIEW-03 — P1: A webhook ledger read failure is still acknowledged as a duplicate event
+
+**Confirmed by isolated reproduction R3. Reopens YOW-09. Blocker before real payment activation.**
+
+At [api/stripe-webhook.js:353](/Users/bishop/Desktop/Claude/yow/api/stripe-webhook.js:353), `claimEvent` ignores the error from reading an existing event claim. If the database returns `{ data: null, error: ... }`, line 355 classifies it as `duplicate`. The handler returns HTTP 200 for that result at line 405.
+
+Reproduction: a duplicate-key insert followed by a synthetic database read failure produced `status: 'duplicate'`. If the existing claim belongs to a worker that crashed before fulfilment, this acknowledges an unapplied event and stops that delivery's retry path.
+
+**Required repair:** treat lookup errors, missing rows and unknown processing states as retryable errors, not proof of successful fulfilment. Only acknowledge a duplicate after positively establishing completion. Add a handler-level regression for this exact failed lookup, including a stale processing claim. Track implementation under the payment roadmap.
+
+### REVIEW-04 — P1: Concurrent Monthly and Lifetime events can still downgrade a Lifetime licence
+
+**Confirmed by isolated concurrency reproduction R6. Reopens YOW-10. Blocker before real payment activation.**
+
+[api/stripe-webhook.js:112](/Users/bishop/Desktop/Claude/yow/api/stripe-webhook.js:112) reads account metadata, then decides whether the account holds Lifetime before later writing the plan at line 136. [api/stripe-webhook.js:193](/Users/bishop/Desktop/Claude/yow/api/stripe-webhook.js:193) independently reads metadata for Lifetime fulfilment and writes at line 207. The event ledger serializes deliveries of the same event ID, not different events concerning the same account.
+
+Reproduction: begin a Monthly handler and pause its metadata write after it reads the old Monthly plan. Complete Lifetime fulfilment, which grants `premium_plus_lifetime`. Resume the Monthly write: the final plan becomes `premium_monthly`. The test used actual entitlement functions and controlled synthetic admin responses; it also reproduces when metadata updates merge fields rather than replacing the whole object.
+
+**Impact:** fetching current Stripe subscription state solves stale event snapshots, but does not prevent two valid handlers from overwriting each other's entitlement decisions.
+
+**Required repair:** coordinate fulfilment per account using transactional/serialized entitlement updates or a separate authoritative licence model. Update independent fields without writing stale copies of unrelated rights. Test overlapping Monthly/Lifetime/renewal handlers as well as sequential replays. Track under the payment roadmap.
+
+### REVIEW-05 — P2: Media deletion ordering is improved, but still not tied to durable save success
+
+**Confirmed by source inspection; no live Storage deletion test. YOW-15 only partially addressed.**
+
+Removing the premature call in the faction form fixes the specific “save refused” case. However, [src/store/useStore.js:3154](/Users/bishop/Desktop/Claude/yow/src/store/useStore.js:3154) still initiates cleanup immediately after `saveSeriesSyncedItem` returns a local record. Its commit path at [src/store/useStore.js:2240](/Users/bishop/Desktop/Claude/yow/src/store/useStore.js:2240) is synchronous and does not await cloud acceptance or the asynchronous local transaction. Cover/banner replacement similarly deletes the previous image based on the immediate result at [src/components/Layout.jsx:397](/Users/bishop/Desktop/Claude/yow/src/components/Layout.jsx:397).
+
+Account deletion remains media-first at [src/utils/firestoreSync.js:516](/Users/bishop/Desktop/Claude/yow/src/utils/firestoreSync.js:516). Retrying `delete_user` three times and reporting that images were already removed improves diagnosis, but does not make the failed operation recoverable. If all attempts fail, the account and records survive without their images.
+
+**Required repair:** queue old-media cleanup after durable reference acknowledgement, with safe retry and ownership/reference checks. Model account deletion as a resumable operation rather than deleting irreversible assets before establishing the deletion state. Include local transaction failure and persistent RPC failure tests. Do not describe YOW-15 as fully closed.
+
+### REVIEW-06 — P2: The manuscript indicator still turns a cloud error into “saved”
+
+**Confirmed by isolated reproduction R4. YOW-02 only partially addressed.**
+
+The keyed cloud failure tracking is a real improvement. The manuscript UI remains unchanged at [src/components/Manuscript/Manuscript.jsx:632](/Users/bishop/Desktop/Claude/yow/src/components/Manuscript/Manuscript.jsx:632): everything other than `syncing` becomes `saved` once local writes settle. Supplying `syncStatus.state = 'error'` to the actual effect still produces `saved`.
+
+The nearby comment defines this as local save status, but the label does not communicate that distinction, and its behaviour is still partly driven by Cloud status. Users should not have to infer whether “saved” means device-only or synchronized.
+
+**Required repair:** explicitly distinguish durable local saving from Cloud synchronization/failure and test the actual visible indicator. Do not close this portion of the original finding based only on `trackSync` tests.
+
+### REVIEW-07 — P2: The new PDF encoding breaks YOW's own PDF text import
+
+**Confirmed by isolated reproduction R7. New regression involving YOW-08/22.**
+
+The PDF writer now correctly encodes Western European characters using WinAnsi octal escapes at [src/utils/projectExportPdf.js:730](/Users/bishop/Desktop/Claude/yow/src/utils/projectExportPdf.js:730). The supported YOW PDF reader at [src/components/AIImportModal.jsx:154](/Users/bishop/Desktop/Claude/yow/src/components/AIImportModal.jsx:154) does not decode octal escapes.
+
+Using the actual new encoder followed by the actual importer, `café — €` became the literal text `caf\351 \227 \200`. The reproduction used a minimal synthetic PDF content stream rather than a rendered PDF. This is a text-decoding mismatch, not a layout issue.
+
+**Required repair:** implement the corresponding PDF literal-string/encoding decoding, or use an appropriate maintained parser. Add an export → import text comparison for accents, smart punctuation, euro signs, backslashes and parentheses. General non-Latin PDF support remains an explicit limitation: warning plus `?` is a mitigation, not character preservation.
+
+### REVIEW-08 — P2: Import validation accepts IDs that the importer later collapses
+
+**Confirmed by isolated reproduction R5. YOW-12 only partially addressed.**
+
+[src/utils/projectImportValidation.js:21](/Users/bishop/Desktop/Claude/yow/src/utils/projectImportValidation.js:21) accepts both numeric and string IDs; the duplicate check at line 41 uses a Set, which considers `1` and `"1"` different. [src/store/useStore.js:4146](/Users/bishop/Desktop/Claude/yow/src/store/useStore.js:4146) subsequently builds an object-based ID map, which converts both keys to the same string.
+
+Reproduction: a project with character IDs `1` and `"1"` passes the actual validator, but the import map contains one target ID. Two accepted source records can therefore share a new identity and collide.
+
+**Required repair:** require a consistent string-ID schema or canonicalize IDs before uniqueness/reference checks and mapping. Add a malformed native ZIP test through the real import entry point. The validator also checks only a selected set of structural links; it should not yet be described as validating every project relationship.
+
+## What passed independent verification
+
+| Check | Fresh result on 23 October | Scope |
+| --- | --- | --- |
+| Existing Vitest suite | **182 files / 1,762 tests passed**, 78.59 seconds | Synthetic Supabase configuration; jsdom canvas/navigation warnings remain. |
+| Lint | **0 errors / 133 warnings** | No automatic fixes. |
+| New typecheck gate | **Passed** | Selected contracts/helpers only. `useStore`, App recovery and full feature graph are not comprehensively checked; `noImplicitAny` is disabled in this config. |
+| Module loading | **250 local modules passed** | Resolution/parsing. |
+| E2E matrix | **59 specs included** | Inclusion verified; browser suite not independently rerun here. |
+| API imports | **12 routes passed** | Importability, not external service behaviour. |
+| Production build | **Passed**, 2.25 seconds | Output in `/tmp/yow-review-build-20261023`, not deployed. |
+| Bundle budget | **Passed** | Script measured entry 565,687 gzip bytes (~552.4 KiB), total JS 948,876 bytes, CSS 84,362 bytes. Vite's own gzip estimate differs slightly; this is not a runtime benchmark. |
+| Dependency audit | **7 affected entries: 5 high / 2 moderate / 0 critical** | All remaining entries are in the Tailwind development/build chain. Down from 19; no affected production dependency reported in this fresh audit. Not a guarantee of zero vulnerabilities. |
+| Targeted review probes | **Seven problematic behaviours reproduced** | Actual extracted functions/effects with controlled dependencies; no production services. Seven findings have isolated reproductions; REVIEW-05 is source-based. REVIEW-01 combines actual helpers with synthetic persistence calls. |
+
+The original eleven-probe harness relies on old source shapes, so it was not treated as a valid unchanged regression suite against the refactor. The new tests were examined, the full existing suite was run, and separate current-source reproductions were used. A failing old harness caused by changed extraction boundaries would not count as an application failure.
+
+The targeted script/log are `/tmp/yow-review-probes-20261023.mjs` and `/tmp/yow-review-probes-20261023.log`. Other fresh logs are `/tmp/yow-review-vitest-20261023.log`, `/tmp/yow-review-lint-20261023.log`, `/tmp/yow-review-types-20261023.log`, `/tmp/yow-review-build-20261023.log` and `/tmp/yow-review-dependencies-20261023.json`. Temporary files are working evidence, not permanent CI artifacts.
+
+Claude's report describes a 393/394 browser result and successful reruns. Those are **reported prior results**, not browser executions independently witnessed in this review. Fresh real-cloud, packaged-native, migration-application and disaster-recovery tests were not performed.
+
+## Disposition of the original 22 findings
+
+“Addressed in code” means the narrow defect appears corrected in inspected source and the relevant existing checks passed. It is not production sign-off or proof of every failure mode.
+
+| Original ID | Review disposition |
+| --- | --- |
+| YOW-01 | **Addressed in code:** ordinary IndexedDB writes now await transaction completion/abort and request errors. Existing abort regression passed in the full suite. |
+| YOW-02 | **Partially addressed:** acknowledged baselines, keyed failures and retries improve cloud persistence; visible manuscript status still needs REVIEW-06. Recovery boundaries remain unsafe. |
+| YOW-03 | **Not closed:** account-scoped copies are a useful addition, but failed preservation and unsafe replay remain (REVIEW-01/02). |
+| YOW-04 | **Not closed:** normal dirty-record recovery is improved; sign-out recovery bypasses revision safeguards. The first-run 30-minute heuristic and missing-merge-RPC raw-upsert fallback also remain. |
+| YOW-05 | **Improved in code; integration verification pending:** account-generation checks now protect normal load continuations. Test the actual App flow through recovery awaits, account changes and failures, not only the guard helper. |
+| YOW-06 | **Stable-load truncation addressed in code:** ordered pages and exact counts are added. Multi-page concurrent changes still require completeness/consistency tests; pagination is not a transactional snapshot. |
+| YOW-07 | **Partially addressed:** delete errors now propagate; persistent pending deletes/retries improve behaviour. Structural deletions remain eventually consistent, and restore-versus-in-flight-delete still needs integrated testing. |
+| YOW-08 | **Partially addressed:** Western accents and arbitrary non-HTML angle-bracket phrases improve; unsupported scripts still become `?` with a warning. PDF import regression in REVIEW-07. Plain prose containing recognized HTML-like tags still passes through stripping. |
+| YOW-09 | **Not closed:** entitlement error results now fail properly and claims have leases, but ledger lookup failures still get acknowledged (REVIEW-03). Applying the migration is necessary to obtain the lease behaviour; legacy fallback does not supply that protection. |
+| YOW-10 | **Not closed:** sequential maintenance events preserve Lifetime, but concurrent account updates can still downgrade it (REVIEW-04). |
+| YOW-11 | **New-record flow improved; operational verification pending:** pending/accepted/unknown states protect new notices after migration. Existing rows are assumed accepted; that assumption must be checked before enabling destructive cleanup. |
+| YOW-12 | **Partially addressed:** obvious duplicate IDs and selected dangling hierarchy links are rejected. Mixed-type collision remains (REVIEW-08); this is not a comprehensive schema validator. |
+| YOW-13 | **Mitigated, not complete:** cumulative entry checks bound inflation better; oversized exported backups are warned about but can still be unrestorable by YOW. A warning is not a large-backup recovery solution. |
+| YOW-14 | **Narrow cleanup defect addressed in code:** per-scene and legacy version keys are cleared. History remains device-only and outside ZIP backups by design; unsynced recovery copies have a separate privacy/retention scope. |
+| YOW-15 | **Partially addressed:** refused form save no longer deletes the previous faction logo; durable media ownership and failed account deletion remain unresolved (REVIEW-05). |
+| YOW-16 | **Substantially improved:** fresh audit confirms 19 → 7 affected entries, remaining development/build chain. Continue targeted maintenance; no production advisory remains in this audit snapshot. |
+| YOW-17 | **Improved:** insert-then-count admission, upstream deadline, disconnect abort and per-instance concurrency limit are implemented. Infrastructure-error fail-open behaviour and the per-instance scope remain explicit limitations, not a global quota guarantee. |
+| YOW-18 | **Narrow defect addressed in code:** the account ID is no longer sent and prior ID state is cleared by the analytics helper. Full deployed consent/privacy behaviour was not verified. |
+| YOW-19 | **Incremental improvement, not resolved architecture debt:** useful limited typecheck gate; large shared state/lifecycle responsibilities and unchecked core remain. No rewrite recommended. |
+| YOW-20 | **Incremental improvement:** lazy fflate and member-count changes plus a budget gate are useful. Build passes, but realistic device/large-account performance is still not independently measured. |
+| YOW-21 | **Open:** an automated ZIP/DOCX fixture is useful, but is not database + media disaster restoration, rollback or alerting evidence. |
+| YOW-22 | **Partially addressed:** fidelity notes and some PDF rejection improve disclosure. The PDF origin restriction only rejects non-YOW files that contain `/FlateDecode`, not every unsupported PDF; the supported YOW reader also has REVIEW-07. |
+
+## Advice and acceptance criteria
+
+1. **Fix REVIEW-01 and REVIEW-02 first.** These affect whether the only current copy survives and whether another device's writing is overwritten. Require integrated fault tests around sign-out and recovery, not additional tests of isolated helpers alone.
+2. **Fix REVIEW-03 and REVIEW-04 before payment activation.** Keep implementation/evidence under `docs/PAYMENT_ROADMAP.md`. Test database failures and overlapping events, not just serial duplicate delivery.
+3. **Finish media ordering and data-fidelity cases.** Repair REVIEW-05/07/08, and make the save indicator unambiguous (REVIEW-06). Explicitly decide whether limited-script PDF output and oversized unrestorable ZIPs meet the product promise.
+4. **Then complete the release evidence.** Verify migrations and real two-account/cloud workflows in isolated test infrastructure; exercise database plus media restore and rollback; run packaged/native and representative browser workloads. These are engineering checks, not inherently tasks that only the owner can perform.
+5. **Revise closure wording.** Replace “every code-addressable finding fixed” with the narrower, evidenced status once the implementation work is resumed. A passing 1,762-test suite is valuable, but the seven new reproductions demonstrate why it cannot close these boundaries by itself.
+
+**Recommendation:** keep the launch verdict RED. The code is meaningfully better than the audited baseline, but do not expand paid reliance or call the data-safety audit closed yet. This review is focused remediation verification, not a fresh exhaustive certification of all 97 changed files or the production service.
+
+---
+
+# Historical audit — 22 October 2026
+
+The following report assesses commit `a7c48d7`, before the remediation. Use the dated review above for current remediation status.
+
 # Your Own World — Technical Audit
 
 **Status: PARTIAL audit with broad repository coverage and targeted verification of high-risk paths.**

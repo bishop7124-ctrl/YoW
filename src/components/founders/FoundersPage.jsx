@@ -21,7 +21,7 @@ export default function FoundersPage({ user, onGetStarted }) {
 
         <section style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 300px) minmax(0, 1fr)', gap: 'clamp(32px, 7vw, 72px)', alignItems: 'start', marginBottom: 72 }}>
           <aside style={{ padding: 24, border: '1px solid var(--border)', borderRadius: 18, background: 'var(--bg-card)', textAlign: 'center' }}>
-            <img src="/founders/morgan-bishop/pencil-sketch.png" alt="Portrait of Morgan Bishop" style={{ width: 148, height: 148, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)', marginBottom: 18 }} />
+            <img src="/team/morgan-bishop-sketch.png" alt="Portrait of Morgan Bishop" style={{ width: 148, height: 148, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--border)', marginBottom: 18 }} />
             <h2 style={{ fontSize: 20, margin: '0 0 5px' }}>Morgan Bishop</h2>
             <p style={{ color: 'var(--accent)', fontSize: 13, fontWeight: 800, margin: '0 0 12px' }}>Writer · worldbuilder · independent maker</p>
             <p style={{ color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.65, margin: 0 }}>American writer in England. English Literature graduate, tech background, fantasy trilogy in progress. Wife, mum and dog owner. Writes late.</p>

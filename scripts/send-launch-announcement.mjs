@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Owner-run bulk send of docs/emails/paid-launch-announcement.html to every account.
+// Owner-run bulk send of docs/emails/launch-day-announcement.html to every account.
 //
 //   node scripts/send-launch-announcement.mjs                       dry run: counts and lists, sends nothing
 //   node scripts/send-launch-announcement.mjs --test me@example.com sends ONE copy, to that address only
@@ -18,10 +18,10 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const HTML_PATH = path.join(ROOT, 'docs/emails/paid-launch-announcement.html')
-const LEDGER_PATH = path.join(ROOT, 'scripts/.launch-announcement-sent.log')
+const HTML_PATH = path.join(ROOT, 'docs/emails/launch-day-announcement.html')
+const LEDGER_PATH = path.join(ROOT, 'scripts/.launch-day-announcement-sent.log')
 
-const SUBJECT = 'Something exciting (and slightly terrifying!) is happening next week'
+const SUBJECT = 'Your Own World has officially launched 🎉'
 const FROM = 'Morgan at Your Own World <hello@yourownworld.co.uk>'
 const REPLY_TO = 'support@yourownworld.co.uk'
 const SEND_DELAY_MS = 600 // Resend's default limit is 2 requests/second
@@ -56,7 +56,7 @@ const toText = (html) => html
   .replace(/<\/(p|tr|h\d)>/gi, '\n\n')
   .replace(/<[^>]+>/g, '')
   .replace(/&rsquo;/g, "'").replace(/&ndash;/g, '-').replace(/&pound;/g, '£').replace(/&nbsp;/g, ' ')
-  .replace(/&#127881;|&#127757;/g, '')
+  .replace(/&#(127881|127757|127793|10024|127775|127941|9203);/g, '')
   .replace(/\n{3,}/g, '\n\n').trim()
 
 async function resendSend(to, userId) {

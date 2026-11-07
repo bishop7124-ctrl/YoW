@@ -101,6 +101,8 @@ Real checkout and Cloud Mode renewal CTAs are currently replaced with a "Paid pl
 
 Every Stripe value must be from the same mode. Changing a Vercel variable only takes effect after a redeploy.
 
+**Progress log (owner-reported, 2026-10-27).** Launch-switch code deployed (`37fc75e3`). Stripe live Prices, live webhook destination and live portal settings created; Vercel Production variables swapped to live values with `CHECKOUT_OPEN` unset; legacy Supabase and old Vercel-deployment webhook endpoints disabled in live mode (not deleted). Agent checks on production afterwards: `get-founder-slots` reports `checkoutOpen:false`; `create-checkout-session` answers 403 `checkout_closed`; `stripe-webhook` answers "Invalid signature" to a forged signature (secret loaded). Not yet verified: the webhook secret is the live endpoint's, the live Price IDs map to the right plans (both proved only by the first real purchase), and the T-7 migrations are applied. Next: confirm migrations, then step 6 (open checkout, one real Monthly purchase and refund).
+
 ### Sequence
 
 1. Merge and deploy this code (test keys still in place). Confirm Pricing still shows "Register interest" and the private test link still works.

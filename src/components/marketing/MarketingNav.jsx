@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import YOWLogo from '../brand/YOWLogo'
+import { HELP_CENTRE_URL } from '../../config/helpCentre'
 
 const NAV_LINKS = [
   { href: '/features/', label: 'Features', match: '/features' },
   { href: '/pricing/', label: 'Pricing', match: '/pricing' },
   { href: '/faq/', label: 'FAQ', match: '/faq' },
+  { href: HELP_CENTRE_URL, label: 'Help Centre', match: HELP_CENTRE_URL, external: true },
   { href: '/about/', label: 'About Us', match: '/about' },
 ]
 
