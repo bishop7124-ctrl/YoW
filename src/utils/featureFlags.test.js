@@ -55,13 +55,23 @@ describe('evaluateFlags / loadFeatureFlags', () => {
     expect(await loadFeatureFlags(errClient, null)).toEqual({})
   })
 
-  it('retries after a failed load instead of caching the failure', async () => {
-    const rpc = vi.fn()
-      .mockResolvedValueOnce({ data: null, error: { message: 'boom' } })
-      .mockResolvedValueOnce({ data: [flag({ rollout_percent: 100 })], error: null })
-    const client = { rpc }
-    expect(await loadFeatureFlags(client, 'u1')).toEqual({})
-    expect(await loadFeatureFlags(client, 'u1')).toEqual({ story_check: true })
+  it('backs off after a failed load, then retries after five minutes', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-11-08T12:00:00Z'))
+      const rpc = vi.fn()
+        .mockResolvedValueOnce({ data: null, error: { message: 'boom' } })
+        .mockResolvedValueOnce({ data: [flag({ rollout_percent: 100 })], error: null })
+      const client = { rpc }
+      expect(await loadFeatureFlags(client, 'u1')).toEqual({})
+      expect(await loadFeatureFlags(client, 'u1')).toEqual({})
+      expect(rpc).toHaveBeenCalledTimes(1)
+      vi.setSystemTime(new Date('2026-11-08T12:06:00Z'))
+      expect(await loadFeatureFlags(client, 'u1')).toEqual({ story_check: true })
+      expect(rpc).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('fetches once per user and caches', async () => {

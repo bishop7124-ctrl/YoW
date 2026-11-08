@@ -40,31 +40,38 @@ export function evaluateFlags(rows, userId) {
   return result
 }
 
-let cache = { userId: null, flags: {}, promise: null }
+let cache = { userId: null, flags: {}, promise: null, failedAt: 0 }
 
 export function resetFeatureFlagCache() {
-  cache = { userId: null, flags: {}, promise: null }
+  cache = { userId: null, flags: {}, promise: null, failedAt: 0 }
 }
+
+const RETRY_AFTER_FAILURE_MS = 5 * 60 * 1000
+const clock = () => Date.now()
 
 // Loads all flags once per signed-in user per page load. Never throws.
 // Each request writes only to its own entry, so a late response for a previous
-// user can never touch the current user's cache.
+// user can never touch the current user's cache. A failed lookup (e.g. the flag
+// migration is not applied yet) is remembered for five minutes so it does not
+// repeat a failing request on every screen, then retried.
 export async function loadFeatureFlags(supabase, userId) {
   if (!supabase || !userId) return {}
-  if (cache.userId === userId && cache.promise) return cache.promise
-  const entry = { userId, flags: {}, promise: null }
+  if (cache.userId === userId && cache.promise) {
+    if (!cache.failedAt || clock() - cache.failedAt < RETRY_AFTER_FAILURE_MS) return cache.promise
+  }
+  const entry = { userId, flags: {}, promise: null, failedAt: 0 }
   cache = entry
   entry.promise = (async () => {
     try {
       const { data, error } = await supabase.rpc('get_feature_flags')
       if (error) {
-        if (cache === entry) entry.promise = null // don't pin a transient failure
+        entry.failedAt = clock()
         return {}
       }
       entry.flags = evaluateFlags(data, userId)
       return entry.flags
     } catch {
-      if (cache === entry) entry.promise = null
+      entry.failedAt = clock()
       return {}
     }
   })()
