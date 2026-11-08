@@ -18595,6 +18595,7 @@ body {
   gap: 4px;
 }
 .ms-vh-empty-hint { font-size: 11px; opacity: .6; max-width: 280px; margin-top: 4px; }
+.ms-vh-device-note { margin-top: 2px; opacity: .8; }
 
 .ms-vh-cols {
   display: flex;
@@ -24820,3 +24821,24 @@ body {
   font-size: 12px;
   line-height: 1.5;
 }
+
+
+/* Story Check (native continuity panel, behind the story_check flag) */
+.story-check-beta { font-style: normal; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; border: 1px solid currentColor; border-radius: 999px; padding: 1px 6px; margin-left: 6px; opacity: .8; }
+.story-check-intro { margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.5; max-width: 70ch; }
+.story-check-group { display: grid; gap: 6px; }
+.story-check-kind { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-main); }
+.story-check-mark { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid currentColor; font-size: 12px; font-weight: 800; line-height: 1; }
+.story-check-kind-confirmed { color: var(--danger, #d9534f); }
+.story-check-kind-possible { color: var(--accent); }
+.story-check-kind-missing, .story-check-kind-info { color: var(--text-muted); }
+.story-check-kind-help { margin: 0; font-size: 11px; color: var(--text-muted); }
+.story-check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.story-check-item { border: 1px solid var(--project-border); border-radius: var(--r-sm); padding: 10px 12px; display: grid; gap: 4px; }
+.story-check-item strong { font-size: 13px; color: var(--text-main); }
+.story-check-item p { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-muted); overflow-wrap: anywhere; }
+.story-check-actions, .story-check-footer { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.story-check-link { background: none; border: 0; padding: 4px 0; min-height: 32px; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.story-check-rules { display: grid; gap: 8px; font-size: 12px; color: var(--text-main); }
+.story-check-rules label { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.story-check-rules input[type="number"] { width: 72px; }

@@ -5,6 +5,7 @@ import { useUserMediaUrl } from '../../utils/useUserMediaUrl'
 import { relativeTimeFromNow } from '../../utils/relativeTime'
 import { buildWritingGoalStreak, withDailyGoalHistory } from '../../utils/writingStreak'
 import { dailyWordsForScenes, getSceneHistory, getSceneTimestamp } from '../../utils/dailyWords'
+import StoryCheckPanel from './StoryCheckPanel'
 
 const formatNumber = (value) => new Intl.NumberFormat().format(value || 0)
 const READ_WPM = 220
@@ -1127,6 +1128,8 @@ export default function ProjectDashboard({ store }) {
                   />
                 </div>
               </div>
+
+              <StoryCheckPanel store={store} />
 
               <div className="analytics-card">
                 <div className="analytics-card-head">

@@ -1,0 +1,313 @@
+// Native Story Check rules (roadmap A1, design: docs/planning/future-release/06).
+//
+// Every rule is a pure function over structured project records. No prose is
+// read, no network is used, and nothing is guessed: a value that does not parse
+// to a year is reported as "missing", never compared.
+//
+// Finding kinds (never merged):
+//   confirmed - the data contradicts itself
+//   possible  - suspicious, but there are legitimate reasons (ghosts, prophecy…)
+//   missing   - the check could not run because data is absent or unparseable
+//   info      - an observation, not a problem
+
+import { getTimelineYear, parseTimelineYear } from '../timelineYear.js'
+
+export const DEFAULT_SETTINGS = { minParentGap: 12 }
+
+const str = value => (value == null ? '' : String(value))
+const hasText = value => str(value).trim() !== ''
+const label = (record, fallback) => str(record?.name || record?.title).trim() || fallback
+
+const DEAD = new Set(['dead', 'deceased'])
+const ALIVE = new Set(['alive', 'living'])
+const statusOf = character => str(character?.status).trim().toLowerCase()
+
+const finding = ({ ruleId, kind, title, explanation, evidence, values = [] }) => {
+  const ids = evidence.map(item => item.recordId).filter(Boolean).sort()
+  return {
+    id: `${ruleId}:${ids.join('+')}:${values.join('|')}`,
+    source: 'native',
+    ruleId,
+    kind,
+    title,
+    explanation,
+    evidence,
+    // Stable across edits that do not change the facts, so dismissals survive.
+    fingerprint: `${ruleId}:${ids.join('+')}:${values.join('|')}`,
+  }
+}
+
+const characterEvidence = (character, value) => ({
+  label: label(character, 'Unnamed character'), recordType: 'character', recordId: character.id, value,
+})
+const eventEvidence = (event, value) => ({
+  label: label(event, 'Untitled event'), recordType: 'timeline', recordId: event.id, value,
+})
+
+const birthYear = character => parseTimelineYear(character?.birthDate)
+const deathYear = character => parseTimelineYear(character?.deathDate)
+
+// R1 — a character cannot die before they are born.
+export function ruleDeathBeforeBirth({ characters }) {
+  return characters.flatMap(character => {
+    const born = birthYear(character)
+    const died = deathYear(character)
+    if (born === null || died === null || died >= born) return []
+    return [finding({
+      ruleId: 'R1', kind: 'confirmed', title: 'Dies before being born',
+      explanation: `${label(character, 'A character')} is recorded as born in ${born} but dying in ${died}.`,
+      evidence: [characterEvidence(character, `born ${born}, died ${died}`)],
+      values: [born, died],
+    })]
+  })
+}
+
+// R2 — status and death date disagree, or a date is present but unreadable.
+export function ruleStatusConsistency({ characters }) {
+  const out = []
+  characters.forEach(character => {
+    const status = statusOf(character)
+    if (ALIVE.has(status) && hasText(character.deathDate)) {
+      out.push(finding({
+        ruleId: 'R2', kind: 'confirmed', title: 'Marked alive but has a death date',
+        explanation: `${label(character, 'A character')} has status "${status}" and a death date "${str(character.deathDate).trim()}".`,
+        evidence: [characterEvidence(character, `status ${status}, death ${str(character.deathDate).trim()}`)],
+        values: ['alive-with-death'],
+      }))
+    }
+    if (DEAD.has(status) && !hasText(character.deathDate)) {
+      out.push(finding({
+        ruleId: 'R2', kind: 'missing', title: 'Marked dead with no death date',
+        explanation: `${label(character, 'A character')} is marked dead but has no death date, so death-related checks cannot run for them.`,
+        evidence: [characterEvidence(character, `status ${status}`)],
+        values: ['dead-no-date'],
+      }))
+    }
+    ;[['birthDate', 'birth'], ['deathDate', 'death']].forEach(([field, name]) => {
+      if (hasText(character[field]) && parseTimelineYear(character[field]) === null) {
+        out.push(finding({
+          ruleId: 'R2', kind: 'missing', title: `Unreadable ${name} date`,
+          explanation: `${label(character, 'A character')}'s ${name} date "${str(character[field]).trim()}" has no year, so it is skipped by date checks.`,
+          evidence: [characterEvidence(character, str(character[field]).trim())],
+          values: [`unreadable-${name}`],
+        }))
+      }
+    })
+  })
+  return out
+}
+
+// R3 / R4 — events involving a character outside their lifetime. Only the
+// timeline list is read: the History list mirrors it one-to-one, so reading
+// both would report every problem twice.
+export function ruleEventsOutsideLifetime({ characters, timeline }) {
+  const byId = new Map(characters.map(character => [character.id, character]))
+  const out = []
+  timeline.forEach(event => {
+    const start = getTimelineYear(event)
+    if (start === null) return
+    const end = parseTimelineYear(event.endYear) ?? start
+    ;(Array.isArray(event.linkedCharacters) ? event.linkedCharacters : []).forEach(id => {
+      const character = byId.get(id)
+      if (!character) return
+      const died = deathYear(character)
+      const born = birthYear(character)
+      if (died !== null && start > died) {
+        out.push(finding({
+          ruleId: 'R3', kind: 'possible', title: 'Event after a character\'s death',
+          explanation: `"${label(event, 'An event')}" (${start}) involves ${label(character, 'a character')}, who died in ${died}. This may be intentional (a funeral, a ghost, a legacy).`,
+          evidence: [eventEvidence(event, `year ${start}`), characterEvidence(character, `died ${died}`)],
+          values: [start, died],
+        }))
+      }
+      if (born !== null && end < born) {
+        out.push(finding({
+          ruleId: 'R4', kind: 'possible', title: 'Event before a character\'s birth',
+          explanation: `"${label(event, 'An event')}" (${end}) involves ${label(character, 'a character')}, who was born in ${born}. This may be intentional (a prophecy, an ancestral story).`,
+          evidence: [eventEvidence(event, `year ${end}`), characterEvidence(character, `born ${born}`)],
+          values: [end, born],
+        }))
+      }
+    })
+  })
+  return out
+}
+
+const parentChildPairs = characters => {
+  const byId = new Map(characters.map(character => [character.id, character]))
+  const seen = new Set()
+  const pairs = []
+  const add = (parentId, childId) => {
+    const key = `${parentId}>${childId}`
+    const parent = byId.get(parentId)
+    const child = byId.get(childId)
+    if (seen.has(key) || !parent || !child || parentId === childId) return
+    seen.add(key)
+    pairs.push({ parent, child })
+  }
+  characters.forEach(character => {
+    ;(Array.isArray(character.parentIds) ? character.parentIds : []).forEach(id => add(id, character.id))
+    ;(Array.isArray(character.childIds) ? character.childIds : []).forEach(id => add(character.id, id))
+  })
+  return pairs
+}
+
+// R5 — parent not older than child / implausibly small gap.
+export function ruleParentAge({ characters }, settings = DEFAULT_SETTINGS) {
+  const minGap = Number.isFinite(settings.minParentGap) ? settings.minParentGap : DEFAULT_SETTINGS.minParentGap
+  const out = []
+  parentChildPairs(characters).forEach(({ parent, child }) => {
+    const parentBorn = birthYear(parent)
+    const childBorn = birthYear(child)
+    if (parentBorn === null || childBorn === null) return
+    const evidence = [characterEvidence(parent, `born ${parentBorn}`), characterEvidence(child, `born ${childBorn}`)]
+    if (parentBorn >= childBorn) {
+      out.push(finding({
+        ruleId: 'R5', kind: 'confirmed', title: 'Parent is not older than their child',
+        explanation: `${label(parent, 'A parent')} (born ${parentBorn}) is recorded as a parent of ${label(child, 'a child')} (born ${childBorn}).`,
+        evidence, values: [parentBorn, childBorn],
+      }))
+    } else if (childBorn - parentBorn < minGap) {
+      out.push(finding({
+        ruleId: 'R5', kind: 'possible', title: 'Very small age gap between parent and child',
+        explanation: `${label(parent, 'A parent')} is only ${childBorn - parentBorn} years older than ${label(child, 'their child')}. The threshold is ${minGap} years; change it for non-human lifespans.`,
+        evidence, values: [parentBorn, childBorn, minGap],
+      }))
+    }
+  })
+  return out
+}
+
+// R6 — child born well after a parent's death (a posthumous birth within a
+// year is valid and is not reported).
+export function ruleChildAfterParentDeath({ characters }) {
+  const out = []
+  parentChildPairs(characters).forEach(({ parent, child }) => {
+    const died = deathYear(parent)
+    const childBorn = birthYear(child)
+    if (died === null || childBorn === null || childBorn <= died + 1) return
+    out.push(finding({
+      ruleId: 'R6', kind: 'confirmed', title: 'Child born after a parent died',
+      explanation: `${label(child, 'A child')} was born in ${childBorn}, but their parent ${label(parent, '')} died in ${died}.`,
+      evidence: [characterEvidence(parent, `died ${died}`), characterEvidence(child, `born ${childBorn}`)],
+      values: [died, childBorn],
+    }))
+  })
+  return out
+}
+
+// R7 — event year outside the era it is assigned to; era data gaps.
+export function ruleEventOutsideEra({ timeline, eras }) {
+  const byId = new Map(eras.map(era => [era.id, era]))
+  const out = []
+  timeline.forEach(event => {
+    if (!event.eraId) return
+    const era = byId.get(event.eraId)
+    const year = getTimelineYear(event)
+    if (!era || year === null) return
+    const start = parseTimelineYear(era.startYear)
+    const end = parseTimelineYear(era.endYear)
+    if (start === null && end === null) {
+      out.push(finding({
+        ruleId: 'R7', kind: 'missing', title: 'Era has no start or end year',
+        explanation: `${label(era, 'An era')} has no readable years, so events assigned to it cannot be checked.`,
+        evidence: [{ label: label(era, 'Era'), recordType: 'era', recordId: era.id, value: 'no years' }],
+        values: ['era-no-years'],
+      }))
+      return
+    }
+    if ((start !== null && year < start) || (end !== null && year > end)) {
+      out.push(finding({
+        ruleId: 'R7', kind: 'possible', title: 'Event falls outside its era',
+        explanation: `"${label(event, 'An event')}" (${year}) is assigned to ${label(era, 'an era')} (${start ?? '…'} to ${end ?? '…'}).`,
+        evidence: [eventEvidence(event, `year ${year}`), { label: label(era, 'Era'), recordType: 'era', recordId: era.id, value: `${start ?? '…'} to ${end ?? '…'}` }],
+        values: [year, start ?? '', end ?? ''],
+      }))
+    }
+  })
+  return out
+}
+
+// R8 — links that point at records which no longer exist.
+export function ruleDanglingReferences({ characters, locations, timeline }) {
+  const characterIds = new Set(characters.map(character => character.id))
+  const locationIds = new Set(locations.map(location => location.id))
+  const out = []
+  const dangling = (owner, ownerType, field, missingId, evidenceFactory) => out.push(finding({
+    ruleId: 'R8', kind: 'confirmed', title: 'Link to a record that no longer exists',
+    explanation: `${label(owner, 'A record')} has a ${field} link to a record that has been deleted.`,
+    evidence: [evidenceFactory(owner, `${field} → missing`)],
+    values: [field, missingId],
+  }))
+  const idList = value => (Array.isArray(value) ? value : [])
+  characters.forEach(character => {
+    ;['parentIds', 'childIds', 'spouseIds'].forEach(field => {
+      idList(character[field]).forEach(id => { if (!characterIds.has(id)) dangling(character, 'character', field, id, characterEvidence) })
+    })
+    idList(character.locationIds).forEach(id => { if (!locationIds.has(id)) dangling(character, 'character', 'location', id, characterEvidence) })
+    idList(character.relationships).forEach(rel => {
+      if (rel?.targetId && !characterIds.has(rel.targetId)) dangling(character, 'character', 'relationship', rel.targetId, characterEvidence)
+    })
+  })
+  timeline.forEach(event => {
+    idList(event.linkedCharacters).forEach(id => { if (!characterIds.has(id)) dangling(event, 'timeline', 'character', id, eventEvidence) })
+    idList(event.linkedLocations).forEach(id => { if (!locationIds.has(id)) dangling(event, 'timeline', 'location', id, eventEvidence) })
+  })
+  return out
+}
+
+// Info — observations only.
+export function ruleObservations({ timeline, eras }) {
+  const out = []
+  const undated = timeline.filter(event => getTimelineYear(event) === null)
+  if (undated.length) {
+    out.push(finding({
+      ruleId: 'I1', kind: 'info', title: `${undated.length} timeline event${undated.length === 1 ? ' has' : 's have'} no year`,
+      explanation: 'Events with no readable year are left out of every date-based check.',
+      evidence: undated.slice(0, 20).map(event => eventEvidence(event, 'no year')),
+      values: [undated.length],
+    }))
+  }
+  const dated = eras
+    .map(era => ({ era, start: parseTimelineYear(era.startYear), end: parseTimelineYear(era.endYear) }))
+    .filter(item => item.start !== null && item.end !== null)
+  dated.forEach(({ era, start, end }) => {
+    if (start > end) {
+      out.push(finding({
+        ruleId: 'I2', kind: 'confirmed', title: 'Era ends before it starts',
+        explanation: `${label(era, 'An era')} starts in ${start} but ends in ${end}.`,
+        evidence: [{ label: label(era, 'Era'), recordType: 'era', recordId: era.id, value: `${start} to ${end}` }],
+        values: [start, end],
+      }))
+    }
+  })
+  for (let i = 0; i < dated.length; i += 1) {
+    for (let j = i + 1; j < dated.length; j += 1) {
+      const a = dated[i]
+      const b = dated[j]
+      if (a.start <= a.end && b.start <= b.end && a.start <= b.end && b.start <= a.end) {
+        out.push(finding({
+          ruleId: 'I3', kind: 'info', title: 'Eras overlap',
+          explanation: `${label(a.era, 'An era')} and ${label(b.era, 'another era')} cover some of the same years. Events in the overlap cannot be assigned to an era automatically.`,
+          evidence: [
+            { label: label(a.era, 'Era'), recordType: 'era', recordId: a.era.id, value: `${a.start} to ${a.end}` },
+            { label: label(b.era, 'Era'), recordType: 'era', recordId: b.era.id, value: `${b.start} to ${b.end}` },
+          ],
+          values: [a.start, a.end, b.start, b.end],
+        }))
+      }
+    }
+  }
+  return out
+}
+
+export const RULES = [
+  { id: 'R1', name: 'Death before birth', run: ruleDeathBeforeBirth },
+  { id: 'R2', name: 'Status and date consistency', run: ruleStatusConsistency },
+  { id: 'R3-R4', name: 'Events outside a character\'s lifetime', run: ruleEventsOutsideLifetime },
+  { id: 'R5', name: 'Parent and child ages', run: ruleParentAge },
+  { id: 'R6', name: 'Child born after parent\'s death', run: ruleChildAfterParentDeath },
+  { id: 'R7', name: 'Events outside their era', run: ruleEventOutsideEra },
+  { id: 'R8', name: 'Broken links', run: ruleDanglingReferences },
+  { id: 'I', name: 'Observations', run: ruleObservations },
+]

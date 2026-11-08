@@ -82,6 +82,7 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
           <div>
             <div className="ms-vh-title">Version History</div>
             <div className="ms-vh-subtitle">{scene?.title || 'Scene'}</div>
+            <div className="ms-vh-subtitle ms-vh-device-note">Saved on this device only — not synced to your account or other devices.</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {versions.length > 0 && (
