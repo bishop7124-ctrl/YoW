@@ -1,5 +1,18 @@
 # YOW Deferred QA Plan
 
+## 2026-11-08 Feature-flag migration and daily-words consolidation (owner, A0)
+
+Not run by the agent: needs a real Supabase project and a browser. Apply `supabase/migrations/20261108130000_feature_flags.sql` in the Supabase SQL editor (staging first if you have one). It is additive; nothing in the app reads flags yet, so applying it changes nothing visible.
+
+1. In the SQL editor run `select * from public.get_feature_flags();` (service role / editor). Expect 0 rows.
+2. Insert a test flag: `insert into public.feature_flags (key, enabled, allow_user_ids) values ('test_flag', true, array['<your-user-uuid>']::uuid[]);`
+3. As a signed-in app user (browser console on the site): `await supabase.rpc('get_feature_flags')`. Expect one row with `allowed: true` for you and no `allow_user_ids` field. Repeat as a second account: `allowed: false`.
+4. `await supabase.from('feature_flags').select('*')` as a signed-in user must be denied (permission error), and an insert/update must also be denied.
+5. Signed out (anon key): `rpc('get_feature_flags')` must be denied.
+6. Delete the test row: `delete from public.feature_flags where key = 'test_flag';`
+
+Daily words: open a project with writing history and compare the Overview "today" words with the manuscript Inspector Progress tab. They should now match, and the streak should be unchanged for a normal writing day.
+
 ## 2026-11-08 Site editor setup and checks (owner)
 
 1. In the Supabase SQL editor, run `supabase/migrations/20261108120000_site_content_editor.sql` (or push migrations). It is additive; the public site does not change until you publish something.

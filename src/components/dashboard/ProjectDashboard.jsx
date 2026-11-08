@@ -4,6 +4,7 @@ import { getEnabledSections, getProjectTypeStage } from '../../constants/project
 import { useUserMediaUrl } from '../../utils/useUserMediaUrl'
 import { relativeTimeFromNow } from '../../utils/relativeTime'
 import { buildWritingGoalStreak, withDailyGoalHistory } from '../../utils/writingStreak'
+import { dailyWordsForScenes, getSceneHistory, getSceneTimestamp } from '../../utils/dailyWords'
 
 const formatNumber = (value) => new Intl.NumberFormat().format(value || 0)
 const READ_WPM = 220
@@ -77,61 +78,10 @@ function InfoTip({ title, children }) {
   )
 }
 
-const getSceneTimestamp = scene => {
-  const raw = scene.lastModified || scene.updatedAt || scene.createdAt || scene.created
-  const timestamp = typeof raw === 'number' ? raw : Date.parse(raw)
-  return Number.isFinite(timestamp) ? timestamp : Date.now()
-}
-
-const syncCurrentSceneHistory = (scene, history) => {
-  const currentWords = countWords(scene.content || '')
-  const timestamp = getSceneTimestamp(scene)
-  const latest = history[history.length - 1]
-  if (latest && (latest.words === currentWords || timestamp < latest.timestamp)) return history
-
-  const entry = {
-    date: toDateKey(timestamp),
-    words: currentWords,
-    timestamp,
-  }
-
-  if (latest?.date === entry.date) {
-    return history.map((item, index) => index === history.length - 1 ? entry : item)
-  }
-  return [...history, entry].slice(-120)
-}
-
-const getSceneHistory = scene => {
-  if (Array.isArray(scene.wordHistory) && scene.wordHistory.length) {
-    const history = scene.wordHistory
-      .map(entry => ({
-        date: entry.date || toDateKey(entry.timestamp || Date.now()),
-        words: Number(entry.words) || 0,
-        timestamp: entry.timestamp || Date.parse(entry.date || '') || Date.now(),
-      }))
-      .sort((a, b) => a.timestamp - b.timestamp)
-    return syncCurrentSceneHistory(scene, history)
-  }
-  return [{
-    date: toDateKey(getSceneTimestamp(scene)),
-    words: countWords(scene.content || ''),
-    timestamp: getSceneTimestamp(scene),
-  }]
-}
-
 const buildWritingAnalytics = (stats, dailyGoal) => {
   const today = startOfDay(Date.now())
   const dateKeys = Array.from({ length: 35 }, (_, index) => toDateKey(shiftDate(today, index - 34)))
-  const allDailyWords = {}
-
-  stats.scenes.forEach(scene => {
-    const history = getSceneHistory(scene)
-    history.forEach((entry, index) => {
-      const previous = index > 0 ? history[index - 1].words : 0
-      const delta = Math.max(0, entry.words - previous)
-      allDailyWords[entry.date] = (allDailyWords[entry.date] || 0) + delta
-    })
-  })
+  const allDailyWords = dailyWordsForScenes(stats.scenes)
   const dailyWords = Object.fromEntries(dateKeys.map(key => [key, allDailyWords[key] || 0]))
 
   const progression = dateKeys.slice(-14).map(key => {

@@ -398,45 +398,18 @@ export function formatShortDate(dateStr) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-// Net words added per date for a scene (wordHistory is a cumulative daily log).
-export function sceneNetByDate(scene) {
-  const history = scene.wordHistory ?? []
-  if (!history.length) return {}
-  const byDate = {}
-  history.forEach(h => {
-    if (!byDate[h.date] || h.timestamp > byDate[h.date].timestamp) {
-      byDate[h.date] = h
-    }
-  })
-  const sorted = Object.keys(byDate).sort()
-  const net = {}
-  sorted.forEach((date, i) => {
-    const cur = byDate[date].words
-    const prev = i > 0 ? byDate[sorted[i - 1]].words : 0
-    net[date] = Math.max(0, cur - prev)
-  })
-  return net
-}
-
-export function totalWordsOnDate(scenes, date) {
-  return scenes.reduce((sum, s) => sum + (sceneNetByDate(s)[date] ?? 0), 0)
-}
-
-export function dailyWordsForScenes(scenes) {
-  return scenes.reduce((totals, scene) => {
-    Object.entries(sceneNetByDate(scene)).forEach(([date, words]) => {
-      totals[date] = (totals[date] || 0) + words
-    })
-    return totals
-  }, {})
-}
+// Daily net-word logic lives in src/utils/dailyWords.js (shared with the Overview
+// dashboard). Re-exported here so existing imports keep working.
+export { sceneNetByDate, totalWordsOnDate, dailyWordsForScenes } from '../../utils/dailyWords'
+import { dailyWordsForScenes as dailyWordsOnce, wordsOnDates } from '../../utils/dailyWords'
 
 export function computeStreak(scenes) {
   const today = todayKey()
   let streak = 0
   let date = today
+  const daily = dailyWordsOnce(scenes)
   for (let i = 0; i < 365; i++) {
-    if (totalWordsOnDate(scenes, date) > 0) {
+    if ((daily[date] ?? 0) > 0) {
       streak++
       date = subtractDays(date, 1)
     } else {
@@ -448,10 +421,7 @@ export function computeStreak(scenes) {
 
 export function lastNDays(scenes, n) {
   const today = todayKey()
-  return Array.from({ length: n }, (_, i) => {
-    const date = subtractDays(today, n - 1 - i)
-    return { date, words: totalWordsOnDate(scenes, date) }
-  })
+  return wordsOnDates(scenes, Array.from({ length: n }, (_, i) => subtractDays(today, n - 1 - i)))
 }
 
 // Content can pick up literal HTML entities (e.g. "don&apos;t") from DOCX/AI import
