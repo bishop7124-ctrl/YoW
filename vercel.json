@@ -23,6 +23,7 @@
     { "source": "/family-tree-builder", "destination": "/family-tree-builder/", "permanent": true },
     { "source": "/map-builder-for-writers", "destination": "/map-builder-for-writers/", "permanent": true },
     { "source": "/lore-management", "destination": "/lore-management/", "permanent": true },
+    { "source": "/character-management-software", "destination": "/character-management-software/", "permanent": true },
     { "source": "/beta-disclaimer", "destination": "/beta-disclaimer/", "permanent": true }
   ],
   "rewrites": [
@@ -38,6 +39,7 @@
     { "source": "/family-tree-builder/", "destination": "/family-tree-builder/index.html" },
     { "source": "/map-builder-for-writers/", "destination": "/map-builder-for-writers/index.html" },
     { "source": "/lore-management/", "destination": "/lore-management/index.html" },
+    { "source": "/character-management-software/", "destination": "/character-management-software/index.html" },
     { "source": "/((?!assets/).*)", "destination": "/index.html"  }
   ],
   "crons": [

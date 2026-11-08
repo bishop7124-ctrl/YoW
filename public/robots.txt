@@ -1,25 +1,21 @@
+# robots.txt for https://www.yourownworld.co.uk
+#
+# Public marketing pages are crawlable by all crawlers, including search and AI-search
+# crawlers (Googlebot, Bingbot, OAI-SearchBot, Claude-SearchBot, PerplexityBot, etc.).
+# Private user content is behind authentication and is never served to crawlers; the
+# Disallow rules below only keep crawlers away from non-content endpoints.
+#
+# Crawling policy for model-training crawlers (GPTBot, ClaudeBot, Google-Extended, CCBot,
+# Applebot-Extended) is intentionally unchanged: they are covered by the "*" group below.
+# Blocking them does not affect appearing in AI search results. To opt out of training,
+# add a separate "User-agent: <name>" + "Disallow: /" group; see docs/AI_DISCOVERABILITY_AUDIT.md.
+
 User-agent: *
 Allow: /
-
-# Marketing and public pages
-Allow: /features/
-Allow: /worldbuilding-software/
-Allow: /novel-writing-software/
-Allow: /dnd-campaign-manager/
-Allow: /story-planning-software/
-Allow: /timeline-tool-for-writers/
-Allow: /family-tree-builder/
-Allow: /map-builder-for-writers/
-Allow: /lore-management/
-Allow: /faq/
-Allow: /about/
-Allow: /pricing/
-Allow: /ai-overview/
-Allow: /llms.txt
-
-# Block access to source assets and API internals
-Disallow: /src/
 Disallow: /api/
+Disallow: /src/
 Disallow: /.vite/
+Disallow: /login
+Disallow: /signup
 
 Sitemap: https://www.yourownworld.co.uk/sitemap.xml

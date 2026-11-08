@@ -17,6 +17,7 @@ const USE_CASE_LINKS = [
 const TOOL_LINKS = [
   { href: '/timeline-tool-for-writers/', label: 'Timeline Builder' },
   { href: '/family-tree-builder/', label: 'Family Trees' },
+  { href: '/character-management-software/', label: 'Character Management' },
   { href: '/map-builder-for-writers/', label: 'Map Builder' },
   { href: '/story-planning-software/', label: 'Story Planning' },
 ]

@@ -166,10 +166,10 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
   }
 
   useEffect(() => {
-    injectSchema('ld-pricing-page', { '@context': 'https://schema.org', '@type': 'Product', name: 'Your Own World writing software', offers: DISPLAY_PLANS.map(plan => ({ '@type': 'Offer', name: plan.label, price: plan.price, priceCurrency: 'GBP', availability: plan.key === 'free' ? 'https://schema.org/InStock' : 'https://schema.org/PreOrder', url: 'https://www.yourownworld.co.uk/pricing/' })) })
+    injectSchema('ld-pricing-page', { '@context': 'https://schema.org', '@type': 'Product', name: 'Your Own World writing software', offers: DISPLAY_PLANS.map(plan => ({ '@type': 'Offer', name: plan.label, price: plan.price, priceCurrency: 'GBP', availability: plan.key === 'free' || launchOpen ? 'https://schema.org/InStock' : 'https://schema.org/PreOrder', url: 'https://www.yourownworld.co.uk/pricing/' })) })
     injectSchema('ld-pricing-faq', { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: FAQ.map(item => ({ '@type': 'Question', name: item.q, acceptedAnswer: { '@type': 'Answer', text: item.a } })) })
     return () => { document.getElementById('ld-pricing-page')?.remove(); document.getElementById('ld-pricing-faq')?.remove() }
-  }, [])
+  }, [launchOpen])
 
   return (
     <div className="marketing-shell pricing-page">

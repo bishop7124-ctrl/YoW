@@ -53,12 +53,7 @@
       "name": "Your Own World",
       "alternateName": "YOW",
       "url": "https://www.yourownworld.co.uk/",
-      "description": "All-in-one worldbuilding and writing platform for novelists, fantasy writers, and storytellers.",
-      "potentialAction": {
-        "@type": "SearchAction",
-        "target": "https://www.yourownworld.co.uk/?q={search_term_string}",
-        "query-input": "required name=search_term_string"
-      }
+      "description": "All-in-one worldbuilding and writing platform for novelists, fantasy writers, and storytellers."
     }
     </script>
 
@@ -76,7 +71,7 @@
         "email": "support@yourownworld.co.uk",
         "contactType": "customer support"
       },
-      "sameAs": []
+      "founder": { "@type": "Person", "name": "Morgan Bishop" }
     }
     </script>
 
@@ -90,7 +85,7 @@
       "url": "https://www.yourownworld.co.uk/",
       "applicationCategory": "WritingApplication",
       "applicationSubCategory": "WorldbuildingApplication",
-      "operatingSystem": "Web",
+      "operatingSystem": "Web, macOS, Windows",
       "description": "Your Own World is an all-in-one worldbuilding and writing platform for authors, novelists, fantasy writers, and storytellers. Manage characters, relationships, family trees, lore, timelines, world history, maps, manuscripts, outlines, and notes in one focused creative workspace.",
       "screenshot": "https://www.yourownworld.co.uk/hero-illustration.png",
       "featureList": [
@@ -140,15 +135,15 @@
             "priceCurrency": "GBP",
             "unitCode": "MON"
           },
-          "availability": "https://schema.org/PreOrder",
-          "description": "Monthly membership with unlimited projects, desktop and offline access, updates, and YOW Cloud while subscribed."
+          "availability": "https://schema.org/InStock",
+          "description": "Monthly membership with unlimited projects in the browser, YOW Cloud sync while subscribed, and the option to connect your own AI provider. Desktop and offline access are included with Lifetime, not Monthly."
         },
         {
           "@type": "Offer",
           "name": "Lifetime",
           "price": "75",
           "priceCurrency": "GBP",
-          "availability": "https://schema.org/PreOrder",
+          "availability": "https://schema.org/InStock",
           "description": "Lifetime licence with unlimited projects, permanent desktop and offline access, and one year of YOW Cloud included (two years for the first 100 Founding customers at £50); Cloud is then optional at £6 per year. One-time payment, all sales final."
         }
       ],
@@ -159,6 +154,7 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--seo-fallback-->
     <!-- iOS 26 Safari tints the status bar / bottom toolbar by sampling background-color
          from position:fixed/sticky elements near the viewport edges, not from the
          theme-color meta tag or the body background. These sliver elements exist purely

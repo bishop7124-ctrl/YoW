@@ -22,6 +22,10 @@ Codex, Claude, and any other project agent should use this file as the single pl
 
 ## Phase 0 Rules
 
+### 2026-11-08 AI discoverability and SEO audit
+
+Status: **Audit written; safe fixes implemented locally, uncommitted and not deployed.** Report: [docs/AI_DISCOVERABILITY_AUDIT.md](AI_DISCOVERABILITY_AUDIT.md). Main finding: `/`, `/pricing/`, `/features/` and `/faq/` returned an empty body to non-JS crawlers; fixed with build-time `<noscript>` content (`src/seo/noscriptContent.js`). Also corrected stale `llms.txt`, JSON-LD (fake SearchAction, Monthly desktop claim, PreOrder), "works on any device", removed an unverified competitor table, added `/character-management-software/`. Owner next actions: review/commit/deploy, verify Search Console and Bing, run the manual AI tests, fact-check competitors before any comparison page, decide training-crawler policy. Note FAQ copy is hand-synced into the fallback; re-check if `FAQPage.jsx` content moves.
+
 ### 2026-11-08 12-month marketing plan and automated asset kit
 
 Status: **Plan written; asset kit built; owner setup and two recurring tasks awaiting a yes.** Owner requested a hands-off marketing plan (explicit exception to the single-planning-doc rule): [docs/MARKETING_PLAN.md](MARKETING_PLAN.md). Tooling in `scripts/marketing/` (`build-asset-kit.mjs` regenerates screenshots, 16:9 and captioned 9:16 clips from the sample project; `build-content-queue.mjs` writes a 52-week scheduler CSV; claims live only in `scenes.mjs`). Output is git-ignored under `output/marketing/kit/`. Owner next actions: create social accounts and connect a scheduler (plan section 7); consider signing/notarising desktop builds before download-led promotion. Marketing does not change launch gates; pause promotion if a launch blocker opens.

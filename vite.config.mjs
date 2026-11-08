@@ -5,6 +5,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import registerPaidInterest from './api/register-paid-interest.js'
 import { BILLING } from './src/utils/billingConfig.js'
+import { renderNoscript } from './src/seo/noscriptContent.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -22,15 +23,18 @@ const SPA_SEO_PAGES = {
   'features/index.html': {
     path: '/features/',
     title: 'Features — Your Own World | Worldbuilding & Writing Software',
+    noscript: 'features',
     description: 'Every tool your story needs: AI Import, manuscript editor, characters, lore, maps, timelines, family trees, and AI assistance — built for novelists, comic writers, and tabletop game masters.',
   },
   'pricing/index.html': {
     path: '/pricing/',
+    noscript: 'pricing',
     title: 'Pricing — Your Own World | Worldbuilding & Writing Software',
-    description: `Start Your Own World free. Review planned paid-launch terms for Monthly at £${BILLING.monthlyPrice}/month, Lifetime at £${BILLING.lifetimePrice}, and Founder.`,
+    description: `Start Your Own World free (one project, 250 MB). Paid plans: Monthly at £${BILLING.monthlyPrice}/month, or Lifetime for a one-time £${BILLING.lifetimePrice} (£${BILLING.foundingLifetimePrice} for the first ${BILLING.founderSlotsTotal} customers).`,
   },
   'faq/index.html': {
     path: '/faq/',
+    noscript: 'faq',
     title: 'FAQ — Your Own World | Worldbuilding & Writing Software',
     description: 'Answers to common questions about Your Own World: plans and pricing, storage, Cloud Mode, Founder slots, AI features, exports, and data ownership.',
   },
@@ -62,6 +66,9 @@ function renderSeoHtml(source, page) {
   html = replaceHeadValue(html, /<meta property="og:url" content="[^"]*" \/>/, `<meta property="og:url" content="${url}" />`)
   html = replaceHeadValue(html, /<meta name="twitter:title" content="[^"]*" \/>/, `<meta name="twitter:title" content="${page.title}" />`)
   html = replaceHeadValue(html, /<meta name="twitter:description" content="[^"]*" \/>/, `<meta name="twitter:description" content="${page.description}" />`)
+  // Swap the homepage crawler fallback for this route's own, or drop it where none exists
+  // (so /founders/ never carries homepage copy under its own canonical URL).
+  html = replaceHeadValue(html, /<noscript id="seo-fallback">[\s\S]*?<\/noscript>/, page.noscript ? renderNoscript(page.noscript).replace('<noscript>', '<noscript id="seo-fallback">') : '')
   return html
 }
 
@@ -122,8 +129,12 @@ function stripAnalyticsForDesktop() {
       mode = config.mode
     },
     transformIndexHtml(html) {
-      if (mode !== 'desktop') return html
-      return html.replace(/<!-- ga:start[\s\S]*?<!-- ga:end -->\n?/, '')
+      if (mode !== 'desktop') {
+        return html.replace('<!--seo-fallback-->', renderNoscript('home').replace('<noscript>', '<noscript id="seo-fallback">'))
+      }
+      return html
+        .replace(/<!-- ga:start[\s\S]*?<!-- ga:end -->\n?/, '')
+        .replace('<!--seo-fallback-->', '')
     },
   }
 }
