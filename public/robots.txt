@@ -5,10 +5,11 @@
 # Private user content is behind authentication and is never served to crawlers; the
 # Disallow rules below only keep crawlers away from non-content endpoints.
 #
-# Crawling policy for model-training crawlers (GPTBot, ClaudeBot, Google-Extended, CCBot,
-# Applebot-Extended) is intentionally unchanged: they are covered by the "*" group below.
-# Blocking them does not affect appearing in AI search results. To opt out of training,
-# add a separate "User-agent: <name>" + "Disallow: /" group; see docs/AI_DISCOVERABILITY_AUDIT.md.
+# Policy (owner decision, 2026-11-08): every crawler, including AI search and model-training
+# crawlers (OAI-SearchBot, GPTBot, Claude-SearchBot, ClaudeBot, PerplexityBot, Google-Extended,
+# Applebot-Extended, CCBot), may read the public marketing pages. User projects and accounts
+# are never served as crawlable content: they sit behind authentication and load via /api/
+# and the database, which are disallowed below.
 
 User-agent: *
 Allow: /
