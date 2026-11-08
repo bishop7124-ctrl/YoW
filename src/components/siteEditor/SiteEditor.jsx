@@ -182,6 +182,8 @@ export default function SiteEditor({ user, authLoading }) {
     if (key === page) return
     if (!(await saveDraftNow())) return
     setShowHistory(false)
+    setWorking(null)
+    setLive(null)
     setPage(key)
   }
 
@@ -279,7 +281,7 @@ export default function SiteEditor({ user, authLoading }) {
         )}
 
         {working
-          ? <FieldTree value={working} template={defaults} ctx={ctx} onChange={onChange} />
+          ? <FieldTree key={page} value={working} template={defaults} ctx={ctx} onChange={onChange} />
           : !error && <p style={{ color: 'var(--text-muted)' }}>Loading page…</p>}
       </main>
     </div>

@@ -123,7 +123,9 @@ function ArrayField({ label, value, template, onChange, ctx, path }) {
   )
 }
 
-export default function FieldTree({ value, template, onChange, ctx, path = '', label = null }) {
+export default function FieldTree({ value: rawValue, template, onChange, ctx, path = '', label = null }) {
+  // Never crash on a value missing for this template; show the built-in one.
+  const value = rawValue === undefined ? template : rawValue
   const key = path.split('.').pop()
 
   if (Array.isArray(template)) {
