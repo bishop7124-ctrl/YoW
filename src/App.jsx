@@ -14,7 +14,6 @@ import AIPanel from './components/ai/AIPanel'
 import AccountSettings from './components/account/AccountSettings'
 import HelpContact from './components/help/HelpContact'
 import CookieBanner from './components/legal/CookieBanner'
-import BetaBanner from './components/legal/BetaBanner'
 import LegalModal from './components/legal/LegalModal'
 import AboutPage from './components/about/AboutPage'
 import YOWLogo from './components/brand/YOWLogo'
@@ -1201,7 +1200,6 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       </>
     )
   }
@@ -1216,7 +1214,6 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       </>
     )
   }
@@ -1231,7 +1228,6 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       </>
     )
   }
@@ -1246,7 +1242,6 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       </>
     )
   }
@@ -1263,7 +1258,6 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       </>
     )
   }
@@ -1279,7 +1273,6 @@ function AppInner() {
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
-        <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
       </>
     )
   }
@@ -1346,9 +1339,6 @@ function AppInner() {
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
         {!desktopApp && <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />}
-        {!desktopApp && (
-          <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />
-        )}
       </>
     )
   }
@@ -1695,7 +1685,6 @@ function AppInner() {
       {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
       <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
       <AboutPage open={aboutOpen} onClose={() => setAboutOpen(false)} />
-      {!desktopApp && <BetaBanner user={user} onGetStarted={goToSignup} onGranted={refreshUser} />}
       {maintenanceModalOpen && user && !dataLoading && !isFirstRun && !showWelcomeTour && (
         <CloudExpiryWarningModal
           membership={membership}
