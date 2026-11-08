@@ -35,8 +35,19 @@ Facts below are kept in step with the live site. Prices are in GBP. If anything 
 - [Map builder for writers](https://www.yourownworld.co.uk/map-builder-for-writers/)
 - [Timeline tool for writers](https://www.yourownworld.co.uk/timeline-tool-for-writers/)
 - [Family tree builder](https://www.yourownworld.co.uk/family-tree-builder/)
+- [Character management](https://www.yourownworld.co.uk/character-management-software/)
+- [One-time purchase writing software](https://www.yourownworld.co.uk/one-time-purchase-writing-software/)
 - [D&D campaign manager](https://www.yourownworld.co.uk/dnd-campaign-manager/)
 - [AI assistant overview](https://www.yourownworld.co.uk/ai-overview/)
+
+## Guides
+
+- [All guides](https://www.yourownworld.co.uk/guides/)
+- [How to organise a fantasy world](https://www.yourownworld.co.uk/guides/organise-a-fantasy-world/)
+- [How to choose worldbuilding software](https://www.yourownworld.co.uk/guides/choose-worldbuilding-software/)
+- [How to track characters across a book series](https://www.yourownworld.co.uk/guides/track-characters-across-a-series/)
+- [How to build a fictional family tree](https://www.yourownworld.co.uk/guides/build-a-fictional-family-tree/)
+- [From idea to manuscript: a novel planning workflow](https://www.yourownworld.co.uk/guides/idea-to-manuscript/)
 
 ## Contact
 

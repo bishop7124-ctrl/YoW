@@ -104,4 +104,42 @@
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
   </url>
+  <!-- Guides -->
+  <url>
+    <loc>https://www.yourownworld.co.uk/guides/</loc>
+    <lastmod>2026-11-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.yourownworld.co.uk/guides/organise-a-fantasy-world/</loc>
+    <lastmod>2026-11-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.yourownworld.co.uk/guides/choose-worldbuilding-software/</loc>
+    <lastmod>2026-11-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.yourownworld.co.uk/guides/track-characters-across-a-series/</loc>
+    <lastmod>2026-11-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.yourownworld.co.uk/guides/build-a-fictional-family-tree/</loc>
+    <lastmod>2026-11-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://www.yourownworld.co.uk/guides/idea-to-manuscript/</loc>
+    <lastmod>2026-11-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
 </urlset>

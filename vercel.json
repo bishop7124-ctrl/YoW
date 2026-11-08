@@ -25,10 +25,14 @@
     { "source": "/lore-management", "destination": "/lore-management/", "permanent": true },
     { "source": "/character-management-software", "destination": "/character-management-software/", "permanent": true },
     { "source": "/one-time-purchase-writing-software", "destination": "/one-time-purchase-writing-software/", "permanent": true },
+    { "source": "/guides", "destination": "/guides/", "permanent": true },
+    { "source": "/guides/:slug", "destination": "/guides/:slug/", "permanent": true },
     { "source": "/beta-disclaimer", "destination": "/beta-disclaimer/", "permanent": true }
   ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/guides/", "destination": "/guides/index.html" },
+    { "source": "/guides/:slug/", "destination": "/guides/:slug/index.html" },
     { "source": "/beta-disclaimer/", "destination": "/beta-disclaimer/index.html" },
     { "source": "/about/", "destination": "/about/index.html" },
     { "source": "/ai-overview/", "destination": "/ai-overview/index.html" },
