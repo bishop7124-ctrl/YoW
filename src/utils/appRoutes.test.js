@@ -37,3 +37,15 @@ describe('public route parsing', () => {
     expect(isStandalonePublicRoute(parsePublicRoute('/dashboard'))).toBe(false)
   })
 })
+
+describe('private site editor routes', () => {
+  it('recognises the editor and preview routes as standalone pages', async () => {
+    const { parsePublicRoute, isStandalonePublicRoute } = await import('./appRoutes')
+    expect(parsePublicRoute('/site-editor').page).toBe('site-editor')
+    expect(parsePublicRoute('/site-editor/').page).toBe('site-editor')
+    expect(parsePublicRoute('/site-preview/home')).toMatchObject({ page: 'site-preview', previewPage: 'home' })
+    expect(parsePublicRoute('/site-preview/faq').previewPage).toBe('faq')
+    expect(parsePublicRoute('/site-preview/pricing').page).toBeNull()
+    expect(isStandalonePublicRoute(parsePublicRoute('/site-editor'))).toBe(true)
+  })
+})

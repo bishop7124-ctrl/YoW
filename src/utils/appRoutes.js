@@ -30,6 +30,16 @@ export function parsePublicRoute(path = '') {
     }
   }
 
+  // Private owner tools. Both routes still render for everyone; the editor
+  // itself shows a plain "not found" unless the account is a site editor.
+  if (normalized === '/site-editor') {
+    return { page: 'site-editor', founderProfileSlug: null, authRouteMode: null, previewPage: null }
+  }
+  const previewMatch = normalized.match(/^\/site-preview\/(home|features|faq)$/)
+  if (previewMatch) {
+    return { page: 'site-preview', founderProfileSlug: null, authRouteMode: null, previewPage: previewMatch[1] }
+  }
+
   if (normalized === '/login' || normalized === '/signup') {
     return {
       page: 'auth',

@@ -1,335 +1,10 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import MarketingNav from '../marketing/MarketingNav'
 import MarketingFooter from '../marketing/MarketingFooter'
 import { usePageMeta } from '../../utils/usePageMeta'
+import { useSiteContent } from '../../utils/siteContent'
+import { FEATURES_DEFAULTS } from '../../content/features'
 
-// ── Feature presence values ──────────────────────────────────────────────────
-// true = included (default on)
-// 'opt' = available but not on by default
-// false = not applicable
-// string = nuanced value to display
-
-const FEATURE_MATRIX = [
-  // ── Writing workspace ──
-  {
-    category: 'Writing workspace',
-    features: [
-      {
-        label: 'Writing workspace',
-        prose: 'Manuscript editor',
-        comic: 'Page script editor',
-        ttrpg: 'Session notes editor',
-        dnd: 'Session notes editor',
-        note: null,
-      },
-      {
-        label: 'Structure',
-        prose: 'Acts → Chapters → Scenes (novel); Parts → Chapters → Scenes (novella/short story)',
-        comic: 'Volumes → Issues → Pages',
-        ttrpg: 'Campaign Arcs → Sessions → Encounters',
-        dnd: 'Story Arcs → Sessions → Encounters',
-        note: null,
-      },
-      {
-        label: 'Word target',
-        prose: '80,000 (novel) · 30,000 (novella) · 5,000 (short story)',
-        comic: false,
-        ttrpg: false,
-        dnd: false,
-        note: 'Prose only — session notes are freeform without a word target.',
-      },
-      {
-        label: 'Story event markers',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: 'Labels adapt to each format: Hook / Inciting incident / Climax for novels; Quest hook / Boss battle / Arc climax for 5E campaigns; Splash / Page turn / Issue climax for comics.',
-      },
-      {
-        label: 'Dedicated Write/Edit modes',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Scene/page status tracking',
-        prose: 'Draft / Revised / Final',
-        comic: 'Draft / Revised / Final',
-        ttrpg: 'Draft / Revised / Final',
-        dnd: 'Draft / Revised / Final',
-        note: null,
-      },
-      {
-        label: 'Writing analytics',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Writing streak calendar',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-    ],
-  },
-
-  // ── Characters ──
-  {
-    category: 'Characters',
-    features: [
-      {
-        label: 'Character profiles',
-        prose: true,
-        comic: true,
-        ttrpg: 'NPC-focused profiles',
-        dnd: 'NPC-focused profiles',
-        note: null,
-      },
-      {
-        label: 'Character arc tracking',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Relationship notes',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Scene/encounter appearance tracking',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Family tree builder',
-        prose: 'Default on (novel) · Available (novella, short story)',
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Character sheet builder',
-        prose: false,
-        comic: false,
-        ttrpg: 'System-neutral custom sheet',
-        dnd: '5E classes, stats, spells, and inventory',
-        unique: 'ttrpg',
-        note: 'Exclusive to tabletop project types. Tabletop Campaign gets a system-neutral sheet with your own stats, trackers, and traits; 5E Campaign gets a full 5E sheet with ability scores, class, level, equipment, and spell slots.',
-      },
-    ],
-  },
-
-  // ── World ──
-  {
-    category: 'World',
-    features: [
-      {
-        label: 'Lore archive',
-        prose: true,
-        comic: true,
-        ttrpg: 'Campaign codex',
-        dnd: 'Campaign codex',
-        note: null,
-      },
-      {
-        label: 'Locations database',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Interactive maps',
-        prose: 'Available (not on by default)',
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: 'Maps are on by default for Tabletop, 5E, and Comic projects. Novel/novella/short story projects can enable them in project settings.',
-      },
-      {
-        label: 'Factions & organisations',
-        prose: 'Default on (novel) · Available (novella, short story)',
-        comic: 'Available (not on by default)',
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'World history log',
-        prose: 'Default on (novel) · Available (novella, short story)',
-        comic: 'Available (not on by default)',
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'AI lore conflict checker',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-    ],
-  },
-
-  // ── Planning ──
-  {
-    category: 'Planning',
-    features: [
-      {
-        label: 'Timeline',
-        prose: true,
-        comic: true,
-        ttrpg: 'Campaign history',
-        dnd: 'Campaign history',
-        note: null,
-      },
-      {
-        label: 'Custom in-world calendar',
-        prose: true,
-        comic: 'Available',
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Ideas board',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Writing / session scheduler',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Project dashboard',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-    ],
-  },
-
-  // ── AI tools ──
-  {
-    category: 'AI tools',
-    features: [
-      {
-        label: 'Plot hole detector',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Lore conflict checker',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Character interview mode',
-        prose: true,
-        comic: true,
-        ttrpg: 'NPC interview mode',
-        dnd: 'NPC interview mode',
-        note: 'Talk to any character or NPC in-voice. The AI responds informed by their full profile, history, and relationships.',
-      },
-      {
-        label: 'Voice consistency analysis',
-        prose: true,
-        comic: true,
-        ttrpg: false,
-        dnd: false,
-        note: null,
-      },
-      {
-        label: 'Character arc tracking (AI)',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-      {
-        label: 'Connect your own AI provider',
-        prose: true,
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: 'You link your own account from OpenRouter or OpenAI, right from Account Settings. You pay that provider directly for what you use — YOW never marks up or resells AI usage.',
-      },
-    ],
-  },
-
-  // ── Export ──
-  {
-    category: 'Export',
-    features: [
-      {
-        label: 'Manuscript / session export',
-        prose: 'DOCX / PDF / ZIP',
-        comic: 'DOCX / PDF / ZIP',
-        ttrpg: 'DOCX / PDF / ZIP',
-        dnd: 'DOCX / PDF / ZIP',
-        note: null,
-      },
-      {
-        label: 'Project encyclopaedia export',
-        prose: 'Characters, lore, locations, and world data as a formatted document',
-        comic: 'Available',
-        ttrpg: 'Campaign Bible export',
-        dnd: 'Campaign Bible export',
-        note: null,
-      },
-      {
-        label: 'Map export',
-        prose: 'Available',
-        comic: true,
-        ttrpg: true,
-        dnd: true,
-        note: null,
-      },
-    ],
-  },
-]
-
-// Muted accents chosen to sit alongside the app's forest-green/ivory/
-// terracotta palette rather than a stock UI-kit rainbow. Used sparingly —
-// top border, title, bullets, and a very faint background glow — so every
-// card still reads as the same dark surface (see the card render below).
 const COLS = [
   { id: 'prose',  label: 'Prose Fiction',        sub: 'Novel · Novella · Short Story', color: '#C87855' }, // muted terracotta
   { id: 'comic',  label: 'Comic / Graphic Novel', sub: 'Panels, pages and issues',      color: '#B96762' }, // dusty rose
@@ -377,7 +52,7 @@ function FeatureRow({ feature }) {
         </td>
         {COLS.map(col => (
           <td key={col.id} style={{ padding: '10px 12px', verticalAlign: 'top', textAlign: 'center' }}>
-            <CellVal val={feature[col.id]} colId={col.id} uniqueCol={feature.unique} />
+            <CellVal val={feature[col.id]} colId={col.id} uniqueCol={feature._unique} />
           </td>
         ))}
       </tr>
@@ -394,53 +69,10 @@ function FeatureRow({ feature }) {
   )
 }
 
-// Colours are sourced from COLS (single source of truth) so the callout
-// cards and the comparison table below always stay in sync.
-const UNIQUE_CALLOUTS = [
-  {
-    type: 'Prose Fiction',
-    color: COLS.find(c => c.id === 'prose').color,
-    items: [
-      'Word count targets calibrated per format (80k / 30k / 5k)',
-      'Acts, Parts, or Sections structure depending on length',
-      'Voice consistency analysis — maintain narrative tone across long manuscripts',
-      'Project Encyclopaedia export — characters, lore, and world data in one formatted document',
-    ],
-  },
-  {
-    type: 'Comic / Graphic Novel',
-    color: COLS.find(c => c.id === 'comic').color,
-    items: [
-      'Volume → Issue → Page structure purpose-built for sequential art',
-      'Page-level status tracking (Draft / Revised / Final per page)',
-      'Story events mapped to comic moments: Splash, Page turn, Issue climax, Stinger',
-      'Interactive maps on by default for visual world reference',
-    ],
-  },
-  {
-    type: 'Tabletop Campaign',
-    color: COLS.find(c => c.id === 'ttrpg').color,
-    items: [
-      'System-neutral character sheets — your own stats, trackers, traits, and gear',
-      'Session → Encounter structure with campaign arc planning',
-      'System-neutral: works for any genre, game system, or ruleset',
-      'Maps, factions, and world history all on by default',
-      'NPC interview mode — interrogate any character in-voice',
-    ],
-  },
-  {
-    type: '5E Campaign',
-    color: COLS.find(c => c.id === 'dnd').color,
-    items: [
-      '5E character builder with classes, stats, spell slots, and inventory',
-      'Story events use fantasy-adventure language: Quest hook, Dungeon reveal, Boss battle, Arc climax',
-      'Fantasy-first lore language: gods, dungeons, monsters, and high-fantasy world codex',
-      'Full NPC database with secrets, faction loyalties, and GM-only notes',
-    ],
-  },
-]
 
-export default function FeaturesPage({ onGetStarted, onLogin, user }) {
+export default function FeaturesPage({ onGetStarted, onLogin, user, preview = false }) {
+  const c = useSiteContent('features', FEATURES_DEFAULTS, { preview })
+  const heroTitle = c.hero.title.split('\n')
   usePageMeta({
     path: '/features/',
     title: 'Features — Your Own World | Worldbuilding & Writing Software',
@@ -455,32 +87,34 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
 
         {/* ── Hero ── */}
         <section style={{ textAlign: 'center', padding: '80px 0 64px' }}>
-          <p className="eyebrow" style={{ marginBottom: 12 }}>Features</p>
+          <p className="eyebrow" style={{ marginBottom: 12 }}>{c.hero.eyebrow}</p>
           <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3.25rem)', fontWeight: 800, lineHeight: 1.15, marginBottom: 20 }}>
-            Every tool your story needs.<br />Built for the way you write.
+            {heroTitle.map((line, i) => (<Fragment key={i}>{i > 0 && <br />}{line}</Fragment>))}
           </h1>
           <p style={{ fontSize: 17, color: 'var(--text-muted)', maxWidth: 580, margin: '0 auto 36px', lineHeight: 1.65 }}>
-            YOW is one workspace for six different creative formats. AI Import can turn existing notes, drafts, and worldbuilding documents into connected project records for you to review, alongside manuscript, characters, lore, maps, timelines, and AI tools.
+            {c.hero.intro}
           </p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-primary btn-lg" onClick={onGetStarted}>
-              Start for free →
+              {c.hero.primaryCta}
             </button>
             <a href="/pricing/" className="btn btn-secondary btn-lg" style={{ textDecoration: 'none' }}>
-              View pricing
+              {c.hero.secondaryCta}
             </a>
           </div>
         </section>
 
         {/* ── What's unique per type ── */}
         <section style={{ marginBottom: 80 }} aria-label="What's unique per project type">
-          <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8, textAlign: 'center' }}>What makes each format different</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8, textAlign: 'center' }}>{c.unique.title}</h2>
           <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginBottom: 36, fontSize: 15 }}>
-            Every project type shares the same core workspace. These are the features that set each one apart.
+            {c.unique.intro}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16 }}>
-            {UNIQUE_CALLOUTS.map(col => (
-              <div key={col.type} style={{
+            {c.callouts.map((callout, ci) => {
+              const col = { ...callout, color: (COLS.find(x => x.id === callout._col) || COLS[0]).color }
+              return (
+              <div key={ci} style={{
                 border: '1px solid var(--border)',
                 borderTop: `2px solid ${col.color}`,
                 borderRadius: 12, padding: '20px 22px',
@@ -500,30 +134,31 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
                   )}
                 </div>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {col.items.map(item => (
-                    <li key={item} style={{ display: 'flex', gap: 8, fontSize: 13, lineHeight: 1.5 }}>
+                  {col.items.map((item, ii) => (
+                    <li key={ii} style={{ display: 'flex', gap: 8, fontSize: 13, lineHeight: 1.5 }}>
                       <span style={{ color: col.color, flexShrink: 0, marginTop: 1 }}>↳</span>
                       <span style={{ color: 'var(--text-muted)' }}>{item}</span>
                     </li>
                   ))}
                 </ul>
               </div>
-            ))}
+              )
+            })}
           </div>
         </section>
 
         {/* ── Full feature matrix ── */}
         <section style={{ marginBottom: 80 }} aria-label="Full feature comparison">
-          <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8 }}>Full feature breakdown</h2>
+          <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 8 }}>{c.matrixSection.title}</h2>
           <p style={{ color: 'var(--text-muted)', marginBottom: 28, fontSize: 15 }}>
-            Every feature, every project type. Click the <span style={{ fontFamily: 'monospace', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px' }}>i</span> for more detail on any row.
+            {c.matrixSection.introBefore}<span style={{ fontFamily: 'monospace', fontSize: 11, border: '1px solid var(--border)', borderRadius: 4, padding: '0 4px' }}>i</span>{c.matrixSection.introAfter}
           </p>
 
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
               <thead>
                 <tr>
-                  <th style={{ width: '30%', textAlign: 'left', paddingBottom: 16, fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>Feature</th>
+                  <th style={{ width: '30%', textAlign: 'left', paddingBottom: 16, fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{c.matrixSection.featureColumnLabel}</th>
                   {COLS.map(col => (
                     <th key={col.id} style={{ textAlign: 'center', paddingBottom: 16, width: '17.5%' }}>
                       <div style={{ fontSize: 13, fontWeight: 800, color: col.color }}>{col.label}</div>
@@ -543,9 +178,9 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
                 </tr>
               </thead>
               <tbody>
-                {FEATURE_MATRIX.map(section => (
-                  <>
-                    <tr key={section.category + '-heading'}>
+                {c.matrix.map((section, si) => (
+                  <Fragment key={si}>
+                    <tr>
                       <td colSpan={5} style={{
                         paddingTop: 20, paddingBottom: 6,
                         fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
@@ -554,8 +189,8 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
                         {section.category}
                       </td>
                     </tr>
-                    {section.features.map(f => <FeatureRow key={f.label} feature={f} />)}
-                  </>
+                    {section.features.map((f, fi) => <FeatureRow key={fi} feature={f} />)}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -567,35 +202,13 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
           marginBottom: 80, border: '1px solid var(--border)', borderRadius: 14,
           padding: '28px 32px', background: 'var(--bg-card)',
         }}>
-          <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Novel vs Novella vs Short Story</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>{c.proseDiff.title}</h2>
           <p style={{ color: 'var(--text-muted)', marginBottom: 20, fontSize: 14, lineHeight: 1.65 }}>
-            These three formats share the same prose workspace. The differences are in scope and what's switched on by default.
+            {c.proseDiff.intro}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-            {[
-              {
-                label: 'Novel',
-                target: '80,000 words',
-                structure: 'Acts → Chapters → Scenes',
-                on: 'Characters, family tree, factions, lore, locations, timeline, world history, ideas, schedule, AI',
-                available: 'Interactive maps',
-              },
-              {
-                label: 'Novella',
-                target: '30,000 words',
-                structure: 'Parts → Chapters → Scenes',
-                on: 'Characters, lore, locations, timeline, ideas, schedule, AI',
-                available: 'Family tree, factions, maps, world history',
-              },
-              {
-                label: 'Short Story',
-                target: '5,000 words',
-                structure: 'Parts → Sections → Scenes',
-                on: 'Characters, lore, locations, timeline, ideas, schedule, AI',
-                available: 'Family tree, factions, maps, world history',
-              },
-            ].map(item => (
-              <div key={item.label} style={{ padding: '16px 18px', border: '1px solid var(--border)', borderRadius: 10 }}>
+            {c.proseDiff.items.map((item, ii) => (
+              <div key={ii} style={{ padding: '16px 18px', border: '1px solid var(--border)', borderRadius: 10 }}>
                 <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 10 }}>{item.label}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
                   <span style={{ fontWeight: 700, color: 'var(--text-main)' }}>Target:</span> {item.target}
@@ -616,14 +229,14 @@ export default function FeaturesPage({ onGetStarted, onLogin, user }) {
 
         {/* ── CTA ── */}
         <section style={{ textAlign: 'center', padding: '16px 0 0' }}>
-          <h2 style={{ fontSize: 26, fontWeight: 800, marginBottom: 12 }}>Ready to build your world?</h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: 28, fontSize: 16 }}>Free to start · No credit card required · Works on any device</p>
+          <h2 style={{ fontSize: 26, fontWeight: 800, marginBottom: 12 }}>{c.cta.title}</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: 28, fontSize: 16 }}>{c.cta.sub}</p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button type="button" className="btn btn-primary btn-lg" onClick={onGetStarted}>
-              Start building for free →
+              {c.cta.primaryCta}
             </button>
             <a href="/faq/" className="btn btn-secondary btn-lg" style={{ textDecoration: 'none' }}>
-              Read the FAQ
+              {c.cta.secondaryCta}
             </a>
           </div>
         </section>

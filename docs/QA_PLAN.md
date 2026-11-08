@@ -1,5 +1,17 @@
 # YOW Deferred QA Plan
 
+## 2026-11-08 Site editor setup and checks (owner)
+
+1. In the Supabase SQL editor, run `supabase/migrations/20261108120000_site_content_editor.sql` (or push migrations). It is additive; the public site does not change until you publish something.
+2. Make yourself an editor (replace the email with your own login): `insert into public.site_editors (user_id) select id from auth.users where email = 'YOUR@EMAIL';` Then confirm one row: `select count(*) from public.site_editors;`
+3. After the next deploy, sign in at `/login`, then open `/site-editor`. Expect the editor. Open it signed out, and as a second non-editor account: expect a plain "Page not found" both times.
+4. Edit one headline, wait for "Draft saved", press **Open live preview**, and confirm the change shows in the preview tab but not on the public page. Press **Publish** and confirm it appears on the public page in a private window.
+5. Swap one screenshot on the homepage (Upload new image), publish, and confirm it shows. Move a homepage section down and confirm the order on the live page.
+6. Press **History**, load the earlier version, and confirm it restores into the editor as a draft.
+7. With the anon key (private window, no login), confirm drafts are not readable: `GET /rest/v1/site_content_draft` returns an empty list or a permission error.
+
+Not claimable from the cloud sandbox: all of the above (needs the real Supabase project and a signed-in session). Browser verification of the editor layout is also still outstanding.
+
 ## 2026-10-23 review fixes: local evidence and remaining real-environment checks
 
 Completed locally: 182 Vitest files / 1,773 tests; 15 distinct Chromium tests across autosave, data safety and real sign-out/sign-in (including injected archive-transaction failure and successful retry); SQL migration execution against synthetic PostgreSQL/PGlite data. These do not substitute for live Supabase or native SQLite-vault evidence. Full details and reproducible commands: `AUDIT_FIX_HANDOVER_2026-10-23.md`.

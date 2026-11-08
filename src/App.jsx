@@ -1,6 +1,6 @@
 import { useMembership } from './utils/useMembership'
 import AccessChangeNotice from './components/account/AccessChangeNotice'
-import { Component, useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef } from 'react'
+import { Component, Suspense, lazy, useCallback, useMemo, useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { Analytics } from '@vercel/analytics/react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { useStore } from './store/useStore'
@@ -25,6 +25,8 @@ import { useTourStore } from './components/onboarding/useTourStore'
 import { WELCOME_TOUR } from './components/onboarding/tourDefinitions'
 import PricingPage from './components/pricing/PricingPage'
 import FeaturesPage from './components/features/FeaturesPage'
+const SiteEditor = lazy(() => import('./components/siteEditor/SiteEditor'))
+const SitePreview = lazy(() => import('./components/siteEditor/SitePreview'))
 import FAQPage from './components/faq/FAQPage'
 import FoundersPage from './components/founders/FoundersPage'
 import DownloadPage from './components/download/DownloadPage'
@@ -1201,6 +1203,22 @@ function AppInner() {
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
         <LegalModal page={legalPage} onClose={() => setLegalPage(null)} onNavigate={setLegalPage} />
       </>
+    )
+  }
+
+  if (!desktopApp && publicRoute.page === 'site-editor') {
+    return (
+      <Suspense fallback={null}>
+        <SiteEditor user={user} authLoading={authLoading} />
+      </Suspense>
+    )
+  }
+
+  if (!desktopApp && publicRoute.page === 'site-preview') {
+    return (
+      <Suspense fallback={null}>
+        <SitePreview page={publicRoute.previewPage} />
+      </Suspense>
     )
   }
 

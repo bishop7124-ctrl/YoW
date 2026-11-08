@@ -50,7 +50,7 @@ describe('unsigned-app disclosure (pre-purchase)', () => {
   it('is shown on Pricing, FAQ and Download', () => {
     expect(read('src/components/pricing/PricingPage.jsx')).toContain('DESKTOP_UNSIGNED_SHORT')
     expect(read('src/components/pricing/PricingPage.jsx')).toContain('DESKTOP_UNSIGNED_DETAIL')
-    expect(read('src/components/faq/FAQPage.jsx')).toContain('DESKTOP_UNSIGNED_DETAIL')
+    expect(read('src/content/faq.js')).toContain('DESKTOP_UNSIGNED_DETAIL')
     expect(read('src/components/download/DownloadPage.jsx')).toMatch(/Open Anyway/)
     expect(read('src/components/download/DownloadPage.jsx')).toMatch(/Run anyway/)
   })
