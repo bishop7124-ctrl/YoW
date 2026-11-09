@@ -32,6 +32,18 @@ describe('project backup round trip', () => {
     expect(restored.chapters).toEqual(source.chapters)
   })
 
+  it('keeps Story Check dismissals, muted rules and the parent-gap setting', async () => {
+    const source = project()
+    source.project.storyCheck = {
+      dismissed: { 'R5:a>b:12': { at: 1700000000000, title: 'Parent born after child' } },
+      mutedRules: ['R7'],
+      minParentGap: 15,
+    }
+    const restored = await tryReadYowZip(await fileFrom(await createProjectZipBlob(source), 'backup.zip'))
+    expect(restored.project.storyCheck).toEqual(source.project.storyCheck)
+    expect(validateProjectImportData(restored)).toEqual({ valid: true, errors: [] })
+  })
+
   it('produces a backup that passes the importer\'s own validation', async () => {
     const restored = await tryReadYowZip(await fileFrom(await createProjectZipBlob(project()), 'backup.zip'))
     expect(validateProjectImportData(restored)).toEqual({ valid: true, errors: [] })

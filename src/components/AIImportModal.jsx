@@ -1576,6 +1576,15 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
     if (yowImport?.project?.scheduleCalendar) extras.scheduleCalendar = yowImport.project.scheduleCalendar
     if (yowImport?.project?.scheduleViewSettings) extras.scheduleViewSettings = yowImport.project.scheduleViewSettings
     if (yowImport?.project?.categoryOptions) extras.categoryOptions = yowImport.project.categoryOptions
+    // Story Check: rule choices travel with a backup. Dismissals do not — they are keyed to record
+    // ids, which a restore re-issues, so they could never match again.
+    const importedStoryCheck = yowImport?.project?.storyCheck
+    if (importedStoryCheck && typeof importedStoryCheck === 'object') {
+      const storyCheck = {}
+      if (Array.isArray(importedStoryCheck.mutedRules)) storyCheck.mutedRules = importedStoryCheck.mutedRules.filter(id => typeof id === 'string')
+      if (Number.isFinite(importedStoryCheck.minParentGap)) storyCheck.minParentGap = importedStoryCheck.minParentGap
+      if (Object.keys(storyCheck).length) extras.storyCheck = storyCheck
+    }
     const novel = store.addNovel({ title: title || 'Imported Project', description, type, ...extras }, { seedManuscript: !selections.acts })
     if (!novel) { setAiError('Could not create project (read-only mode?).'); return }
     setPhase('creating')
