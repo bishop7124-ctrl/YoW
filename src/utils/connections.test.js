@@ -22,6 +22,21 @@ const store = {
 }
 const names = (result, group) => result.groups.find(g => g.name === group)?.items.map(i => i.title) || []
 
+describe('mention matching', () => {
+  const only = content => ({ characters: [{ id: 'c', name: 'Ash' }], scenes: [{ id: 's', title: 'S', content }] })
+  const hits = content => getConnections(only(content), { type: 'character', id: 'c' }).groups.length
+  it('matches at the start, after punctuation and before punctuation, but not inside another word', () => {
+    expect(hits('Ash arrived.')).toBe(1)
+    expect(hits('"Ash," she said')).toBe(1)
+    expect(hits('met (ash) there')).toBe(1)
+    expect(hits('Ashford and Trash')).toBe(0)
+  })
+  it('does not rely on regex lookbehind (unsupported by older iOS Safari)', async () => {
+    const { readFileSync } = await import('node:fs')
+    expect(readFileSync(new URL('./connections.js', import.meta.url), 'utf8')).not.toMatch(/\(\?<[=!]/)
+  })
+})
+
 describe('getConnections', () => {
   it('collects a character\'s family, relationships, faction, places, lore, events and POV chapters', () => {
     const r = getConnections(store, { type: 'character', id: 'a' })

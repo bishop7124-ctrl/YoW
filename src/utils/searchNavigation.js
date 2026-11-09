@@ -17,7 +17,6 @@ export function openRecord(store, { type, id }) {
       return true
     case 'chapter':
       navigateToFindingRef(store, { type, id })
-      if (!(store.scenes || []).some(scene => scene.chapterId === id)) window.dispatchEvent(new CustomEvent('switch-writing'))
       return true
     case 'act': {
       const chapterIds = new Set((store.chapters || []).filter(chapter => chapter.actId === id).map(chapter => chapter.id))

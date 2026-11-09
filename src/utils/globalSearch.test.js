@@ -38,6 +38,17 @@ describe('buildSearchIndex', () => {
     expect(plainText([{ title: 'Beat', body: 'x' }])).toBe('Beat — x')
   })
 
+  it('indexes maps from the store\'s mapProject and keeps punctuation in titles', () => {
+    const idx = buildSearchIndex({
+      activeNovelId: 'n',
+      mapProject: { maps: [{ id: 'm1', novelId: 'n', name: 'Northern Reach', notes: 'Border forts' }] },
+      characters: [{ id: 'c', novelId: 'n', name: 'Dr_Q: the C# Wizard' }],
+    })
+    expect(searchIndex(idx, 'northern').map(r => r.type)).toEqual(['map'])
+    expect(searchIndex(idx, 'c#')[0].title).toBe('Dr_Q: the C# Wizard')
+    expect(searchIndex(idx, 'dr_q').length).toBe(1)
+  })
+
   it('tolerates missing lists and malformed records', () => {
     expect(buildSearchIndex({})).toEqual([])
     expect(() => buildSearchIndex({ characters: [null, {}, { id: 'x' }], scenes: 'nope' })).not.toThrow()

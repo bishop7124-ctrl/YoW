@@ -86,6 +86,19 @@ describe('GlobalSearch', () => {
     expect(input()).toBeTruthy()
   })
 
+  it('keeps Tab inside the dialog: it wraps between the reachable controls only', () => {
+    render(<GlobalSearch store={makeStore()} onClose={vi.fn()} />)
+    type('mira')
+    const reachable = [...screen.getByRole('dialog').querySelectorAll('button, input')].filter(el => el.tabIndex >= 0)
+    expect(reachable.length).toBeGreaterThan(2)
+    const last = reachable[reachable.length - 1]
+    last.focus()
+    fireEvent.keyDown(last, { key: 'Tab' })
+    expect(document.activeElement).toBe(reachable[0])
+    fireEvent.keyDown(reachable[0], { key: 'Tab', shiftKey: true })
+    expect(document.activeElement).toBe(last)
+  })
+
   it('Shift+Enter opens connections for the active result', () => {
     render(<GlobalSearch store={makeStore()} onClose={vi.fn()} />)
     type('tomas')

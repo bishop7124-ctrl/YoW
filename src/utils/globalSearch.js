@@ -44,6 +44,9 @@ export function plainText(value) {
     .trim()
 }
 
+// Titles and names keep their punctuation (C#, snake_case, "Re: Act I"); only prose is de-marked-up.
+const plainTitle = value => flattenText(value).replace(/\s+/g, ' ').trim()
+
 const field = (label, value) => ({ label, text: plainText(value) })
 const clean = fields => fields.filter(item => item.text)
 
@@ -62,8 +65,8 @@ export function buildSearchIndex(store, { enabledSections = null } = {}) {
   const add = (type, record, title, subtitle, fields, extra = {}) => {
     if (!record?.id || !allowed(type)) return
     const entry = {
-      key: `${type}:${record.id}`, type, id: record.id, title: plainText(title) || `Untitled ${SEARCH_TYPES[type].singular.toLowerCase()}`,
-      subtitle: plainText(subtitle), fields: clean(fields), ...extra,
+      key: `${type}:${record.id}`, type, id: record.id, title: plainTitle(title) || `Untitled ${SEARCH_TYPES[type].singular.toLowerCase()}`,
+      subtitle: plainTitle(subtitle), fields: clean(fields), ...extra,
     }
     // Lower-cased once here so a keystroke does not re-lowercase every scene's full text.
     entry.haystack = [entry.title, entry.subtitle, ...entry.fields.map(item => item.text)].join(' \n ').toLowerCase()
@@ -86,7 +89,7 @@ export function buildSearchIndex(store, { enabledSections = null } = {}) {
   inProject(store.ideaEntries).forEach(e => add('idea', e, e.title, e.group || e.status, [
     field('Description', e.description), field('Body', e.body), field('Tags', e.tags),
   ]))
-  inProject(store.maps).forEach(m => add('map', m, m.name, '', [field('Notes', m.notes)]))
+  inProject(store.maps ?? store.mapProject?.maps).forEach(m => add('map', m, m.name, '', [field('Notes', m.notes)]))
 
   const chapters = inProject(store.chapters)
   const chapterById = byId(chapters)

@@ -34,9 +34,9 @@ export default function GlobalSearch({ store, enabledSectionIds = null, onClose 
     () => buildSearchIndex(store, { enabledSections: enabledKey === null ? null : new Set(enabledKey.split('|')) }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [store.activeNovelId, store.characters, store.factions, store.locations, store.loreEntries, store.timeline, store.worldHistory,
-      store.storySchedule, store.ideaEntries, store.maps, store.acts, store.chapters, store.scenes, enabledKey],
+      store.storySchedule, store.ideaEntries, store.maps, store.mapProject?.maps, store.acts, store.chapters, store.scenes, enabledKey],
   )
-  const allResults = useMemo(() => searchIndex(index, query, { limit: 200 }), [index, query])
+  const allResults = useMemo(() => searchIndex(index, query, { limit: 500 }), [index, query])
   const counts = useMemo(() => countByType(allResults), [allResults])
   const results = useMemo(
     () => (typeFilter === 'all' ? allResults : allResults.filter(result => result.type === typeFilter)).slice(0, 60),
@@ -67,7 +67,9 @@ export default function GlobalSearch({ store, enabledSectionIds = null, onClose 
       return
     }
     if (event.key === 'Tab') {
-      const focusable = [...(dialogRef.current?.querySelectorAll('button, input, [href], [tabindex]:not([tabindex="-1"])') || [])].filter(el => !el.disabled)
+      // Only elements Tab can actually reach: the result rows and "Connections" buttons are tabindex -1.
+      const focusable = [...(dialogRef.current?.querySelectorAll('button, input, [href], [tabindex]') || [])]
+        .filter(el => !el.disabled && el.tabIndex >= 0)
       if (!focusable.length) return
       const first = focusable[0], last = focusable[focusable.length - 1]
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
@@ -177,15 +179,15 @@ export default function GlobalSearch({ store, enabledSectionIds = null, onClose 
               )}
               {query.trim() && results.length === 0 && <p className="psearch-hint">No matches for “{query.trim()}”.</p>}
               {results.map((result, i) => (
-                <div
-                  key={result.key}
-                  id={`${listId}-opt-${i}`}
-                  role="option"
-                  aria-selected={i === safeActive}
-                  className={`psearch-result${i === safeActive ? ' is-active' : ''}`}
-                  onMouseMove={() => { if (i !== safeActive) setActiveIndex(i) }}
-                >
-                  <button type="button" className="psearch-result-main" tabIndex={-1} onClick={() => open(result)}>
+                <div key={result.key} className={`psearch-result${i === safeActive ? ' is-active' : ''}`} role="presentation">
+                  <div
+                    id={`${listId}-opt-${i}`}
+                    role="option"
+                    aria-selected={i === safeActive}
+                    className="psearch-result-main"
+                    onMouseMove={() => { if (i !== safeActive) setActiveIndex(i) }}
+                    onClick={() => open(result)}
+                  >
                     <span className="psearch-type">{SEARCH_TYPES[result.type].singular}</span>
                     <span className="psearch-result-text">
                       <span className="psearch-result-title"><Highlighted parts={highlightParts(result.title, terms)} /></span>
@@ -197,7 +199,7 @@ export default function GlobalSearch({ store, enabledSectionIds = null, onClose 
                         </span>
                       )}
                     </span>
-                  </button>
+                  </div>
                   {CONNECTION_TYPES.has(result.type) && (
                     <button
                       type="button"

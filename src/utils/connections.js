@@ -19,7 +19,8 @@ function namesFor(type, record) {
 function mentionPattern(names) {
   if (!names.length) return null
   // Letters/digits on either side mean "part of another word", so "Ash" does not match "Ashford".
-  return new RegExp(`(?<![\\p{L}\\p{N}])(?:${names.map(escapeRegExp).join('|')})(?![\\p{L}\\p{N}])`, 'iu')
+  // (No lookbehind: older iOS Safari cannot parse it, which would break the whole Connections view.)
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}])(?:${names.map(escapeRegExp).join('|')})(?![\\p{L}\\p{N}])`, 'iu')
 }
 
 export function getConnections(store, target) {
