@@ -3,7 +3,7 @@ import { getSceneVersions, clearSceneVersions, deleteSceneVersion } from '../../
 import {
   useCloudSceneHistoryActive, useCloudSceneHistoryPaused, retryCloudSceneHistoryNow, loadCloudSceneVersions,
   pushCloudSceneVersion, fetchCloudVersionContent, deleteCloudSceneVersion,
-  clearCloudSceneVersions, listRecentlyDeletedScenes, sceneVersionHash,
+  clearCloudSceneVersions, listRecentlyDeletedScenes, sceneVersionHash, lastCloudHistoryError,
 } from '../../utils/cloudSceneVersions'
 
 function deleteVersion(id, sceneId) {
@@ -207,6 +207,13 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
                 ? 'Recent versions are kept on this device and in your account: the latest 20, plus one a day for 30 days.'
                 : 'Saved on this device only — not synced to your account or other devices.'}
             </div>
+            {cloudActive && (
+              <div className="ms-vh-subtitle ms-vh-status" data-testid="vh-cloud-status">
+                {cloudLoadedFor === scene?.id
+                  ? `Account: ${cloudVersions.length} saved for this scene.`
+                  : `Account: could not load${lastCloudHistoryError() ? ` (${lastCloudHistoryError()})` : ''}.`}
+              </div>
+            )}
             {cloudActive && cloudPaused && (
               <div className="ms-vh-subtitle ms-vh-paused" role="status">
                 Account history is paused after a connection problem, so only this device's versions are shown.{' '}
@@ -310,7 +317,7 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
                   </>
                 ) : (
                   <div className="ms-vh-preview-hint">
-                    Select a version on the left to preview its content.
+                    Select a version above to preview it.
                   </div>
                 )}
               </div>

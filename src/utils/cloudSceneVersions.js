@@ -63,6 +63,9 @@ export function useCloudSceneHistoryPaused() {
 
 // Runs an RPC/query for the CURRENT user. Returns { ok, data }. A result that arrives after the
 // account changed is discarded, and a failure pauses cloud calls for five minutes.
+let lastErrorCode = ''
+export const lastCloudHistoryError = () => lastErrorCode
+
 async function call(run, { backoff = true } = {}) {
   if (!usable()) return { ok: false, data: null }
   const userAtStart = state.userId
@@ -70,8 +73,10 @@ async function call(run, { backoff = true } = {}) {
     const { data, error } = await run()
     if (userAtStart !== state.userId) return { ok: false, data: null }
     if (error) throw error
+    lastErrorCode = ''
     return { ok: true, data }
   } catch (error) {
+    lastErrorCode = String(error?.code || error?.message || 'unknown').slice(0, 60)
     // Housekeeping calls (purge, marking deletions) never pause history: a missing function or a hiccup there
     // must not silently stop snapshots and listing for everyone.
     if (backoff && !PER_CALL_ERROR_CODES.has(error?.code)) {

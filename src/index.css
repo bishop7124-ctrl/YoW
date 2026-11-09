@@ -16845,7 +16845,7 @@ body {
 /* In the narrow Inspector the list and preview cannot sit side by side: stack them, list on top. */
 .ms-vh-panel--embedded .ms-vh-cols { flex-direction: column; overflow-y: auto; }
 .ms-vh-panel--embedded .ms-vh-list { width: 100%; max-height: 220px; flex-shrink: 0; border-right: none; border-bottom: 1px solid var(--border); }
-.ms-vh-panel--embedded .ms-vh-preview-pane { flex: 1 0 auto; min-height: 240px; overflow: visible; }
+.ms-vh-panel--embedded .ms-vh-preview-pane { flex: 1 0 auto; min-height: 120px; overflow: visible; }
 .ms-vh-panel--embedded .ms-vh-preview-header { flex-wrap: wrap; }
 .ms-vh-panel--embedded .ms-vh-preview-text { overflow-y: visible; }
 .ms-vh-panel--embedded .ms-vh-header { flex-wrap: wrap; gap: 8px; padding: 12px 14px; }

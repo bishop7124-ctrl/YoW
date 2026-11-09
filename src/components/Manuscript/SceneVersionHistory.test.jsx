@@ -16,6 +16,7 @@ vi.mock('../../utils/cloudSceneVersions', () => ({
   useCloudSceneHistoryActive: () => cloud.active,
   useCloudSceneHistoryPaused: () => cloud.paused,
   retryCloudSceneHistoryNow: (...args) => cloud.retry(...args),
+  lastCloudHistoryError: () => "",
   loadCloudSceneVersions: async () => ({ ok: cloud.ok, versions: cloud.ok ? cloud.list : [] }),
   pushCloudSceneVersion: (...args) => cloud.push(...args),
   fetchCloudVersionContent: async id => cloud.content[id] || null,
