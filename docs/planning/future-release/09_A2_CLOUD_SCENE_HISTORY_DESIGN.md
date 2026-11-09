@@ -108,7 +108,16 @@ Turn `cloud_scene_history` off: writes and reads stop immediately and local hist
 4. A2d: scene/project delete cleanup, and (if chosen) deleted-scene recovery.
 5. A2e: QA plan entries, browser verification with two accounts, then enable for you only, then widen.
 
-## 9. Decisions needed from you
+## 9. Decisions (answered 2026-11-09)
+
+1. Cloud-synced accounts only; no local-only history path.
+2. Deleted scenes and projects keep their versions for 30 days ("Recently deleted"); built as `deleted_at` plus purge functions in the migration.
+3. Panel wording is "recent versions", never "backup".
+4. Per-user cap of 2,000 versions, never removing a scene's newest version.
+
+Migration `supabase/migrations/20261109120000_scene_versions.sql` implements these; `supabase/tests/scene_versions.pglite.mjs` runs 30 checks against it on a scratch Postgres (PGlite). Not applied to production.
+
+## 9a. Original questions (kept for the record)
 
 1. Cloud sync only? I assumed cloud history applies to accounts that already sync scenes. Is Free tier cloud-synced today, or local-only? (If Free is local-only, they get no cloud history, which is consistent with the rest of Free.)
 2. Deleted scenes: keep their versions for 30 days so an accidentally deleted scene can be recovered ("Recently deleted scenes")? It is a real safety gain for small extra storage, but it needs one more column or table and a small UI. Recommended: yes, as A2d, after the core works.
