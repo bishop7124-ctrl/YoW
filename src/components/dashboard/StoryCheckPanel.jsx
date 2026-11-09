@@ -74,6 +74,7 @@ export default function StoryCheckPanel({ store }) {
         It does not read your manuscript text.
       </p>
 
+      <div className="story-check-scroll" tabIndex={0} role="region" aria-label="Story Check results">
       {total === 0 ? (
         <p className="analytics-empty">Nothing to report. Add birth and death years to characters and years to timeline events to give it more to check.</p>
       ) : KIND_ORDER.filter(kind => result.grouped[kind].length).map(kind => (
@@ -111,17 +112,6 @@ export default function StoryCheckPanel({ store }) {
         </section>
       ))}
 
-      <div className="story-check-footer">
-        {result.dismissed.length > 0 && (
-          <button type="button" className="story-check-link" onClick={() => setShowDismissed(open => !open)} aria-expanded={showDismissed}>
-            {showDismissed ? 'Hide' : 'Show'} {result.dismissed.length} marked intentional
-          </button>
-        )}
-        <button type="button" className="story-check-link" onClick={() => setShowRules(open => !open)} aria-expanded={showRules}>
-          Rules{mutedRules.length ? ` (${mutedRules.length} off)` : ''}
-        </button>
-      </div>
-
       {showDismissed && (
         <ul className="story-check-list">
           {result.dismissed.map(finding => (
@@ -157,6 +147,18 @@ export default function StoryCheckPanel({ store }) {
           </label>
         </div>
       )}
+      </div>
+
+      <div className="story-check-footer">
+        {result.dismissed.length > 0 && (
+          <button type="button" className="story-check-link" onClick={() => setShowDismissed(open => !open)} aria-expanded={showDismissed}>
+            {showDismissed ? 'Hide' : 'Show'} {result.dismissed.length} marked intentional
+          </button>
+        )}
+        <button type="button" className="story-check-link" onClick={() => setShowRules(open => !open)} aria-expanded={showRules}>
+          Rules{mutedRules.length ? ` (${mutedRules.length} off)` : ''}
+        </button>
+      </div>
     </div>
   )
 }
