@@ -14,6 +14,7 @@ vi.mock('../supabase', () => ({ supabase: { rpc: (...args) => rpc(...args), from
 vi.mock('./offlineMock', () => ({ OFFLINE_MODE: false }))
 
 import {
+  isCloudSceneHistoryPaused, retryCloudSceneHistoryNow, loadCloudSceneVersions,
   configureCloudSceneVersions, isCloudSceneHistoryActive, pushCloudSceneVersion, listCloudSceneVersions,
   listRecentlyDeletedScenes, markCloudScenesDeleted, markCloudNovelDeleted, sceneVersionHash,
 } from './cloudSceneVersions'
@@ -142,5 +143,44 @@ describe('cloud scene versions', () => {
     // sha256("T\nhello") — matches encode(sha256(convert_to(title || E'\\n' || content,'UTF8')),'hex')
     const { createHash } = await import('node:crypto')
     expect(await sceneVersionHash('T', 'hello')).toBe(createHash('sha256').update('T\nhello').digest('hex'))
+  })
+
+  it('a failing housekeeping call (purge or marking deletions) never pauses history', async () => {
+    rpc.mockImplementation(async name => (name === 'save_scene_version' ? { data: true, error: null } : { data: null, error: Object.assign(new Error('function does not exist'), { code: '42883' }) }))
+    configureCloudSceneVersions({ enabled: true, userId: 'u1' }) // runs the purge, which fails
+    await flush()
+    markCloudScenesDeleted(['a']); markCloudNovelDeleted('n1')
+    await flush()
+    expect(isCloudSceneHistoryPaused()).toBe(false)
+    expect(await pushCloudSceneVersion({ ...version, timestamp: Date.now() + 5 })).toBe(true)
+    rpc.mockReset().mockResolvedValue({ data: true, error: null })
+  })
+
+  it('a real failure pauses history visibly, and "try again" lifts the pause', async () => {
+    configureCloudSceneVersions({ enabled: true, userId: 'u1' })
+    rpc.mockClear()
+    rpc.mockResolvedValueOnce({ data: null, error: new Error('network down') })
+    expect(isCloudSceneHistoryPaused()).toBe(false)
+    await pushCloudSceneVersion({ ...version, timestamp: Date.now() + 5 })
+    expect(isCloudSceneHistoryPaused()).toBe(true)
+    retryCloudSceneHistoryNow()
+    expect(isCloudSceneHistoryPaused()).toBe(false)
+    expect(await pushCloudSceneVersion({ ...version, timestamp: Date.now() + 6 })).toBe(true)
+  })
+
+  it('"force" sends text the writer is looking at even if it predates this session; normal pushes do not', async () => {
+    configureCloudSceneVersions({ enabled: true, userId: 'u1' })
+    rpc.mockClear()
+    const old = { ...version, timestamp: Date.now() - 60_000 }
+    expect(await pushCloudSceneVersion(old)).toBe(false)
+    expect(await pushCloudSceneVersion(old, 'auto', { force: true })).toBe(true)
+  })
+
+  it('tells "could not check" apart from "no versions"', async () => {
+    configureCloudSceneVersions({ enabled: true, userId: 'u1' })
+    queryResult.value = { data: [], error: null }
+    expect(await loadCloudSceneVersions('s1')).toEqual({ ok: true, versions: [] })
+    queryResult.value = { data: null, error: new Error('boom') }
+    expect(await loadCloudSceneVersions('s1')).toEqual({ ok: false, versions: [] })
   })
 })

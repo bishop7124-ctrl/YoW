@@ -43,6 +43,8 @@ Free for every plan, no flag and no migration. Checked in the browser (offline s
 
 Code is merged behind the `cloud_scene_history` flag (off for everyone). Migrations: `20261109120000_scene_versions.sql` (applied by the owner) and `20261109130000_scene_versions_batch_and_sweep.sql` (**apply this one too**; the batch-delete call and the orphan sweep need it). A scratch-Postgres run of both (`supabase/tests/scene_versions.pglite.mjs`, 39 checks) passed; nothing below has been run against the live database yet.
 
+**2026-11-11 update.** Owner testing showed history sometimes missing in a private window. Cause: cloud history could pause itself silently after one failed housekeeping call, and a snapshot taken in the first seconds after the app loaded was never retried. Fixed: housekeeping can no longer pause history, opening a scene's Version history now sends the account any device-only versions and the text as it is right now, and the panel says "Account history is paused" with a Try again button when there is a connection problem. Re-test with row 1 of the Owner Action Queue (it includes a check that BOTH migrations are applied).
+
 1. Apply the second migration in the SQL editor. Check: `select proname from pg_proc where proname = 'mark_scenes_versions_deleted';` returns one row.
 2. Turn the flag on for yourself only: `insert into public.feature_flags (key, enabled, allow_user_ids) values ('cloud_scene_history', true, array['<your-user-uuid>']::uuid[]);`
 3. Signed in with a cloud-synced account, open a scene and type for over a minute. Check in SQL: `select scene_id, source, word_count, created_at from public.scene_versions order by created_at desc limit 5;` shows a row for that scene.

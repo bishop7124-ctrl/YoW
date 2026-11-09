@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { getSceneVersions, clearSceneVersions, deleteSceneVersion } from '../../utils/sceneVersions'
 import {
-  useCloudSceneHistoryActive, listCloudSceneVersions, fetchCloudVersionContent, deleteCloudSceneVersion,
+  useCloudSceneHistoryActive, useCloudSceneHistoryPaused, retryCloudSceneHistoryNow, loadCloudSceneVersions,
+  pushCloudSceneVersion, fetchCloudVersionContent, deleteCloudSceneVersion,
   clearCloudSceneVersions, listRecentlyDeletedScenes, sceneVersionHash,
 } from '../../utils/cloudSceneVersions'
 
@@ -40,6 +41,9 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
   const [recovering, setRecovering] = useState(null)
   const overlayRef = useRef(null)
   const cloudActive = useCloudSceneHistoryActive()
+  const cloudPaused = useCloudSceneHistoryPaused()
+  const [cloudLoadedFor, setCloudLoadedFor] = useState(null) // scene id whose account list loaded successfully
+  const backfilledRef = useRef(null)
 
   const reload = useCallback(() => {
     if (scene?.id) setLocalVersions(getSceneVersions(scene.id))
@@ -51,15 +55,20 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
   const sceneId = scene?.id
   const reloadCloud = useCallback(async () => {
     if (!sceneId || !cloudActive) { setCloudVersions([]); return }
-    setCloudVersions(await listCloudSceneVersions(sceneId))
+    const loaded = await loadCloudSceneVersions(sceneId)
+    if (loaded.ok) { setCloudVersions(loaded.versions); setCloudLoadedFor(sceneId) }
   }, [sceneId, cloudActive])
 
   useEffect(() => {
     let cancelled = false
     if (!sceneId || !cloudActive) return undefined
-    listCloudSceneVersions(sceneId).then(list => { if (!cancelled) setCloudVersions(list) })
+    loadCloudSceneVersions(sceneId).then(loaded => {
+      if (cancelled || !loaded.ok) return
+      setCloudVersions(loaded.versions)
+      setCloudLoadedFor(sceneId)
+    })
     return () => { cancelled = true }
-  }, [sceneId, cloudActive])
+  }, [sceneId, cloudActive, cloudPaused])
 
   // Match device snapshots to account copies by the same content hash the server stores.
   useEffect(() => {
@@ -69,6 +78,33 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
       .then(pairs => { if (!cancelled) setLocalHashes(Object.fromEntries(pairs)) })
     return () => { cancelled = true }
   }, [cloudActive, localVersions])
+
+  // Opening a scene's history makes sure the account has what this device has: any device-only snapshots, and the
+  // text as it is right now. A snapshot taken in the first seconds after the app loaded, or while the connection
+  // was down, would otherwise never reach the account. Runs once per scene per open; failures are quiet.
+  useEffect(() => {
+    if (!cloudActive || !scene?.id || cloudLoadedFor !== scene.id || backfilledRef.current === scene.id) return undefined
+    if (localVersions.length > 0 && Object.keys(localHashes).length < localVersions.length) return undefined // hashes still computing
+    backfilledRef.current = scene.id
+    let cancelled = false
+    ;(async () => {
+      const inCloud = new Set(cloudVersions.map(v => v.hash))
+      const candidates = localVersions.filter(v => !inCloud.has(localHashes[v.id])).slice(0, 20)
+      const currentHash = await sceneVersionHash(scene.title || '', scene.content || '')
+      const known = new Set([...inCloud, ...Object.values(localHashes)])
+      if (currentHash && !known.has(currentHash) && typeof scene.content === 'string') {
+        candidates.unshift({ sceneId: scene.id, novelId: scene.novelId || null, title: scene.title || '', content: scene.content, timestamp: Date.now() })
+      }
+      let pushed = 0
+      for (const version of candidates.reverse()) { // oldest first, so the newest ends up newest
+        if (cancelled) break
+        if (await pushCloudSceneVersion(version, 'auto', { force: true })) pushed += 1
+      }
+      if (pushed && !cancelled) reloadCloud()
+    })()
+    return () => { cancelled = true; if (backfilledRef.current === scene.id) backfilledRef.current = null }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloudActive, scene?.id, cloudLoadedFor, localHashes, localVersions, cloudVersions])
 
   const versions = useMemo(() => {
     if (!cloudActive) return localVersions.map(v => ({ ...v, where: 'device' }))
@@ -171,6 +207,12 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
                 ? 'Recent versions are kept on this device and in your account: the latest 20, plus one a day for 30 days.'
                 : 'Saved on this device only — not synced to your account or other devices.'}
             </div>
+            {cloudActive && cloudPaused && (
+              <div className="ms-vh-subtitle ms-vh-paused" role="status">
+                Account history is paused after a connection problem, so only this device's versions are shown.{' '}
+                <button type="button" className="ms-vh-deleted-toggle" onClick={() => { retryCloudSceneHistoryNow(); reloadCloud() }}>Try again</button>
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {versions.length > 0 && (

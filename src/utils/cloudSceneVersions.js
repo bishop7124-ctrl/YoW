@@ -36,7 +36,7 @@ export function configureCloudSceneVersions({ enabled, userId }) {
   registerSceneVersionSink(on ? (version, source) => { pushCloudSceneVersion(version, source) } : null)
   emit()
   // Housekeeping: drop this user's expired "recently deleted" versions once per sign-in.
-  if (on) call(() => supabase.rpc('purge_expired_scene_versions'))
+  if (on) call(() => supabase.rpc('purge_expired_scene_versions'), { backoff: false })
 }
 
 export function useCloudSceneHistoryActive() {
@@ -47,11 +47,23 @@ export function useCloudSceneHistoryActive() {
   )
 }
 
-const usable = () => isCloudSceneHistoryActive() && Date.now() >= blockedUntil
+const nowMs = () => Date.now()
+const usable = () => isCloudSceneHistoryActive() && nowMs() >= blockedUntil
+
+// True while cloud history is paused after a connection problem (it retries by itself after a few minutes).
+export const isCloudSceneHistoryPaused = () => isCloudSceneHistoryActive() && nowMs() < blockedUntil
+export function retryCloudSceneHistoryNow() { blockedUntil = 0; emit() }
+export function useCloudSceneHistoryPaused() {
+  return useSyncExternalStore(
+    listener => { listeners.add(listener); return () => listeners.delete(listener) },
+    () => isCloudSceneHistoryPaused(),
+    () => false,
+  )
+}
 
 // Runs an RPC/query for the CURRENT user. Returns { ok, data }. A result that arrives after the
 // account changed is discarded, and a failure pauses cloud calls for five minutes.
-async function call(run) {
+async function call(run, { backoff = true } = {}) {
   if (!usable()) return { ok: false, data: null }
   const userAtStart = state.userId
   try {
@@ -60,14 +72,21 @@ async function call(run) {
     if (error) throw error
     return { ok: true, data }
   } catch (error) {
-    if (!PER_CALL_ERROR_CODES.has(error?.code)) blockedUntil = Date.now() + FAILURE_BACKOFF_MS
+    // Housekeeping calls (purge, marking deletions) never pause history: a missing function or a hiccup there
+    // must not silently stop snapshots and listing for everyone.
+    if (backoff && !PER_CALL_ERROR_CODES.has(error?.code)) {
+      blockedUntil = nowMs() + FAILURE_BACKOFF_MS
+      emit()
+    }
     return { ok: false, data: null }
   }
 }
 
-export function pushCloudSceneVersion(version, source = 'auto') {
+// `force` is for text the writer is looking at right now (opening a scene's history): it skips the "written
+// before this session began" guard, which exists only to stop a late flush from a previous account.
+export function pushCloudSceneVersion(version, source = 'auto', { force = false } = {}) {
   if (!version?.sceneId || typeof version.content !== 'string') return Promise.resolve(false)
-  if (!(Number(version.timestamp) >= state.since)) return Promise.resolve(false)
+  if (!force && !(Number(version.timestamp) >= state.since)) return Promise.resolve(false)
   return call(() => supabase.rpc('save_scene_version', {
     p_scene_id: String(version.sceneId),
     p_novel_id: version.novelId ? String(version.novelId) : null,
@@ -91,13 +110,18 @@ const toVersion = row => ({
   cloud: true,
 })
 
-export async function listCloudSceneVersions(sceneId) {
-  if (!sceneId) return []
+// Like listCloudSceneVersions but says whether the lookup worked, so callers can tell "no versions" from "could not
+// check".
+export async function loadCloudSceneVersions(sceneId) {
+  if (!sceneId) return { ok: true, versions: [] }
   const { ok, data } = await call(() => supabase.from('scene_versions')
     .select('id,scene_id,novel_id,title,word_count,content_hash,source,created_at')
     .eq('scene_id', String(sceneId)).is('deleted_at', null)
     .order('created_at', { ascending: false }).limit(LIST_LIMIT))
-  return ok && Array.isArray(data) ? data.map(toVersion) : []
+  return ok && Array.isArray(data) ? { ok: true, versions: data.map(toVersion) } : { ok: false, versions: [] }
+}
+export async function listCloudSceneVersions(sceneId) {
+  return (await loadCloudSceneVersions(sceneId)).versions
 }
 
 export async function fetchCloudVersionContent(cloudId) {
@@ -116,15 +140,15 @@ export function markCloudScenesDeleted(sceneIds = []) {
   const ids = [...new Set(sceneIds.map(String))]
   for (let i = 0; i < ids.length; i += MARK_BATCH) {
     const chunk = ids.slice(i, i + MARK_BATCH)
-    call(() => supabase.rpc('mark_scenes_versions_deleted', { p_scene_ids: chunk }))
+    call(() => supabase.rpc('mark_scenes_versions_deleted', { p_scene_ids: chunk }), { backoff: false })
   }
 }
 export function markCloudNovelDeleted(novelId) {
   if (!novelId || !isCloudSceneHistoryActive()) return
-  call(() => supabase.rpc('mark_novel_versions_deleted', { p_novel_id: String(novelId) }))
+  call(() => supabase.rpc('mark_novel_versions_deleted', { p_novel_id: String(novelId) }), { backoff: false })
 }
 export const unmarkCloudSceneDeleted = sceneId =>
-  call(() => supabase.rpc('unmark_scene_versions_deleted', { p_scene_id: String(sceneId) })).then(r => r.ok)
+  call(() => supabase.rpc('unmark_scene_versions_deleted', { p_scene_id: String(sceneId) }), { backoff: false }).then(r => r.ok)
 
 // Most recent version of each deleted scene in a project, newest deletion first.
 export async function listRecentlyDeletedScenes(novelId) {

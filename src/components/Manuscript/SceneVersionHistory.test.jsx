@@ -9,12 +9,15 @@ vi.mock('../../utils/sceneVersions', () => ({
   deleteSceneVersion: vi.fn(),
 }))
 const cloud = {
-  active: true, list: [], content: { c2: { content: 'cloud only text', title: 'Scene' } }, deleted: [],
+  active: true, paused: false, ok: true, pushed: [], push: vi.fn(async () => true), retry: vi.fn(), list: [], content: { c2: { content: 'cloud only text', title: 'Scene' } }, deleted: [],
   deleteOne: vi.fn(async () => true), clear: vi.fn(async () => true),
 }
 vi.mock('../../utils/cloudSceneVersions', () => ({
   useCloudSceneHistoryActive: () => cloud.active,
-  listCloudSceneVersions: async () => cloud.list,
+  useCloudSceneHistoryPaused: () => cloud.paused,
+  retryCloudSceneHistoryNow: (...args) => cloud.retry(...args),
+  loadCloudSceneVersions: async () => ({ ok: cloud.ok, versions: cloud.ok ? cloud.list : [] }),
+  pushCloudSceneVersion: (...args) => cloud.push(...args),
   fetchCloudVersionContent: async id => cloud.content[id] || null,
   deleteCloudSceneVersion: (...args) => cloud.deleteOne(...args),
   clearCloudSceneVersions: (...args) => cloud.clear(...args),
@@ -30,6 +33,9 @@ const localVersion = (id, content, ts) => ({ id, sceneId: 's1', title: 'Opening'
 
 beforeEach(() => {
   cloud.active = true
+  cloud.paused = false
+  cloud.ok = true
+  cloud.push.mockClear(); cloud.retry.mockClear()
   cloud.deleted = []
   cloud.deleteOne.mockClear(); cloud.clear.mockClear()
   local.list = [localVersion('l1', 'shared text', 3000), localVersion('l2', 'device only text', 2000)]
@@ -113,5 +119,31 @@ describe('SceneVersionHistory with cloud history', () => {
     cloud.active = false
     open({ onRecoverScene: vi.fn(), activeNovelId: 'n1' })
     expect(screen.queryByText('Recently deleted scenes')).toBeNull()
+  })
+
+  it('opening the history sends the account anything only this device has, plus the text as it is now', async () => {
+    // l2 ("device only text") is not in the account; the scene's current text is also new.
+    open({ scene: { ...scene, content: 'brand new current text', novelId: 'n1' } })
+    await waitFor(() => expect(cloud.push).toHaveBeenCalled())
+    const sent = cloud.push.mock.calls.map(([version]) => version.content)
+    expect(sent).toContain('device only text')
+    expect(sent).toContain('brand new current text')
+    expect(sent).not.toContain('shared text') // already in the account
+    expect(cloud.push.mock.calls.every(([, , options]) => options?.force === true)).toBe(true)
+  })
+
+  it('does not push anything when the account list could not be loaded', async () => {
+    cloud.ok = false
+    open()
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(cloud.push).not.toHaveBeenCalled()
+  })
+
+  it('tells the writer when account history is paused and lets them retry', async () => {
+    cloud.paused = true
+    open()
+    expect(screen.getByText(/Account history is paused after a connection problem/)).toBeTruthy()
+    fireEvent.click(screen.getByText('Try again'))
+    expect(cloud.retry).toHaveBeenCalled()
   })
 })
