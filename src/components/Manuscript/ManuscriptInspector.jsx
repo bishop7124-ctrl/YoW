@@ -10,6 +10,7 @@ import { getCharacterAge } from '../../utils/characterAge.js'
 import { buildWritingGoalStreak } from '../../utils/writingStreak.js'
 import { CharacterPortrait } from '../shared/CharacterPortrait.jsx'
 import SceneLinksPanel from './SceneLinksPanel.jsx'
+import GoalsExtended from './GoalsExtended.jsx'
 
 const TABS = [
   { id: 'scene', label: 'Scene' },
@@ -368,6 +369,8 @@ function ProgressTab({ scenes, chapters, writingGoals, onUpdateGoals }) {
           ))}
         </div>
       </div>
+
+      <GoalsExtended goals={goals} onUpdateGoals={onUpdateGoals} dailyWords={dailyWords} totalWords={totalWords} />
 
       <div className="ms-insp-group">
         <div className="ms-insp-label">Targets</div>

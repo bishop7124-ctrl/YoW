@@ -66,6 +66,9 @@ export function AIToolsUpgradeWall() {
       <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 320, margin: 0 }}>
         Upgrade your plan to unlock Plot Hole Detector, Lore Conflict Checker, AI Character Simulation, and Style Analysis.
       </p>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', maxWidth: 340, margin: 0 }}>
+        You do not need AI for the rest of YOW: writing, worldbuilding, project search (press <b>/</b>), Insights on your Overview page and manuscript import all work without it.
+      </p>
       <button
         type="button"
         onClick={() => window.dispatchEvent(new CustomEvent('open-account-settings', { detail: { tab: 'membership' } }))}

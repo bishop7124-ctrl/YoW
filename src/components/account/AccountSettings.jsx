@@ -1998,7 +1998,7 @@ function AISettingsPanel({ userId, membership }) {
           </div>
         </div>
         <AiUpgradeRequiredNotice>
-          AI settings are available after you upgrade. Paid plans let you connect your own AI provider for chat, manuscript suggestions, and project analysis.
+          AI settings are available after you upgrade. Paid plans let you connect your own AI provider for chat, manuscript suggestions, and project analysis. AI is always optional: the rest of YOW works fully without it.
         </AiUpgradeRequiredNotice>
       </section>
     )
@@ -2010,6 +2010,7 @@ function AISettingsPanel({ userId, membership }) {
         <div>
           <p className="eyebrow">AI Integration</p>
           <h2>Model &amp; API keys</h2>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>Optional. YOW works fully without AI; your writing, worldbuilding, search and exports never need an API key.</p>
         </div>
         <div className="account-actions account-heading-actions">
           <button type="button" onClick={handleSave} className="account-primary-button" disabled={saving}>

@@ -24913,3 +24913,17 @@ body {
 .ms-links-suggest button, .ms-links-all { background: none; border: 1px solid var(--border); border-radius: var(--r-pill); color: var(--accent); font: inherit; font-size: 11px; padding: 3px 10px; min-height: 28px; cursor: pointer; }
 .ms-links-all { justify-self: start; }
 .ms-links-error { margin: 0; font-size: 11px; color: var(--danger, #d9534f); }
+/* Extended goals + sprint (A5) */
+.ms-goals-ext { display: grid; gap: 14px; }
+.ms-goal-row { display: grid; gap: 6px; }
+.ms-goal-row-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.ms-goal-edit { background: none; border: 1px solid var(--border); border-radius: var(--r-pill); color: var(--accent); font: inherit; font-size: 11px; padding: 3px 10px; min-height: 28px; cursor: pointer; }
+.ms-goal-edit:disabled { opacity: .5; cursor: default; }
+.ms-goal-note { margin: 0; font-size: 11px; line-height: 1.5; color: var(--text-muted); }
+.ms-goal-on-track { color: var(--text-main); }
+.ms-goal-behind, .ms-goal-passed { color: var(--danger, #d9534f); }
+.ms-sprint-custom { display: flex; align-items: flex-end; gap: 8px; flex-wrap: wrap; }
+.ms-sprint-custom label { display: grid; gap: 3px; font-size: 11px; color: var(--text-muted); }
+.ms-sprint-custom input { padding: 6px 10px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--bg-main); color: var(--text-main); font: 13px var(--font); max-width: 150px; }
+.ms-sprint-clock { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-main); }
+.ms-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
