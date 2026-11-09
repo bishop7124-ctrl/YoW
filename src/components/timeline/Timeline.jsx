@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Modal from '../shared/Modal'
 import ChronicleEntryForm from '../shared/ChronicleEntryForm'
 import { formatTimelineDate, sortTimelineEras } from '../../utils/timelineYear'
@@ -36,12 +36,36 @@ export default function Timeline({ store }) {
     })
   }, [allEvents, effectiveEraId, query])
 
+  // An entry opened from elsewhere (e.g. Story Check) must not stay hidden behind a stale
+  // search or era filter. Only a *change* of selection clears filters, so a filter the user
+  // applies afterwards still hides the panel as before.
+  const [seenSelectedId, setSeenSelectedId] = useState(selectedId)
+  if (seenSelectedId !== selectedId) {
+    setSeenSelectedId(selectedId)
+    if (selectedId && !filtered.some(e => e.sourceType === 'timeline' && e.id === selectedId)
+      && allEvents.some(e => e.sourceType === 'timeline' && e.id === selectedId)) {
+      setSearch('')
+      setActiveEraId('all')
+    }
+  }
+
   const sections = useMemo(() => groupTimelineEntries(filtered,
     effectiveEraId === 'all' ? sortedEras : sortedEras.filter(era => era.id === effectiveEraId),
     { includeEmpty: !query && effectiveEraId === 'all' }), [filtered, sortedEras, effectiveEraId, query])
 
   const selectedEvent = selectedId ? filtered.find(e => e.sourceType === 'timeline' && e.id === selectedId) : null
   const selectedEra = eraById.get(selectedEvent?.eraId)
+
+  // Bring an entry opened from elsewhere (e.g. Story Check) into view.
+  useEffect(() => {
+    if (!selectedId) return
+    scrollRef.current?.querySelector('.tl2-event.is-selected')?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+  }, [selectedId, sections.length])
+
+  const removeLink = (field, id) => {
+    if (!selectedEvent || store.readOnly) return
+    updateEvent(selectedEvent.id, { [field]: (selectedEvent[field] || []).filter(item => item !== id) })
+  }
 
   const handleSave = (data) => {
     const event = formState?.type === 'edit'
@@ -183,11 +207,11 @@ export default function Timeline({ store }) {
                               {event.tags?.map(t => <span key={t} className="tl2-tag">{t}</span>)}
                               {event.linkedCharacters?.map(id => {
                                 const c = characterById.get(id)
-                                return c ? <span key={id} className="tl2-link tl2-link--char">⊙ {c.name}</span> : null
+                                return c ? <span key={id} className="tl2-link tl2-link--char">⊙ {c.name}</span> : <span key={id} className="tl2-link tl2-link--missing">⚠ Deleted character</span>
                               })}
                               {event.linkedLocations?.map(id => {
                                 const l = locationById.get(id)
-                                return l ? <span key={id} className="tl2-link tl2-link--loc">◈ {l.name}</span> : null
+                                return l ? <span key={id} className="tl2-link tl2-link--loc">◈ {l.name}</span> : <span key={id} className="tl2-link tl2-link--missing">⚠ Deleted location</span>
                               })}
                             </div>
                           )}
@@ -237,7 +261,12 @@ export default function Timeline({ store }) {
                           onClick={() => { setSelectedId(null); setSelectedCharacterId(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'characters' } })) }}>
                           ⊙ {c.name}
                         </button>
-                      ) : null
+                      ) : (
+                        <span key={id} className="tl2-panel-missing">
+                          ⚠ Deleted character
+                          {!store.readOnly && <button type="button" className="tl2-panel-missing-remove" onClick={() => removeLink('linkedCharacters', id)}>Remove link</button>}
+                        </span>
+                      )
                     })}
                   </div>
                 </div>
@@ -253,7 +282,12 @@ export default function Timeline({ store }) {
                           onClick={() => { setSelectedId(null); setSelectedLocationId(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'locations' } })) }}>
                           ◈ {l.name}
                         </button>
-                      ) : null
+                      ) : (
+                        <span key={id} className="tl2-panel-missing">
+                          ⚠ Deleted location
+                          {!store.readOnly && <button type="button" className="tl2-panel-missing-remove" onClick={() => removeLink('linkedLocations', id)}>Remove link</button>}
+                        </span>
+                      )
                     })}
                   </div>
                 </div>

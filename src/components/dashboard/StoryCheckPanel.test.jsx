@@ -74,9 +74,18 @@ describe('StoryCheckPanel', () => {
     const next = makeStore({ storyCheck: { dismissed } })
     rerender(<StoryCheckPanel store={next} />)
     expect(screen.queryByText('Dies before being born')).toBeNull()
-    fireEvent.click(screen.getByText(/1 marked intentional/))
+    fireEvent.click(screen.getByText(/1 dismissed or intentional/))
     fireEvent.click(screen.getByText('Show again'))
     expect(next.updateNovel.mock.calls[0][1].storyCheck.dismissed).toEqual({})
+  })
+
+  it('lets info observations be dismissed', () => {
+    flag.on = true
+    const store = makeStore()
+    store.activeProjectStats.timeline = [{ id: 't1', title: 'Undated thing' }]
+    render(<StoryCheckPanel store={store} />)
+    fireEvent.click(screen.getByText('Dismiss'))
+    expect(Object.keys(store.updateNovel.mock.calls[0][1].storyCheck.dismissed)[0]).toMatch(/^I1:/)
   })
 
   it('can mute a rule', () => {

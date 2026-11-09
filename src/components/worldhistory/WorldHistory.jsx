@@ -167,7 +167,7 @@ function HistoryWorkspace({ store }) {
                 <div className="flex flex-wrap gap-1">
                   {liveSelected.linkedCharacters.map(id => {
                     const c = characterById.get(id)
-                    if (!c) return null
+                    if (!c) return <span key={id} className="tl2-panel-missing">⚠ Deleted character</span>
                     return (
                       <button key={id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => { setSelectedCharacterId(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'characters' } })) }}>
                         {c.name}
@@ -184,7 +184,7 @@ function HistoryWorkspace({ store }) {
                 <div className="flex flex-wrap gap-1">
                   {liveSelected.linkedLocations.map(id => {
                     const l = locationById.get(id)
-                    if (!l) return null
+                    if (!l) return <span key={id} className="tl2-panel-missing">⚠ Deleted location</span>
                     return (
                       <button key={id} className="chip hover:border-[var(--accent)] hover:text-[var(--accent)]" onClick={() => { setSelectedLocationId(id); window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'locations' } })) }}>
                         {l.name}

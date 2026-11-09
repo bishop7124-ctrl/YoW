@@ -84,4 +84,25 @@ describe('Timeline', () => {
     fireEvent.click(screen.getByRole('button', { name: /^New\s?1/ }))
     expect(screen.queryByRole('button', { name: 'Edit', exact: true })).toBeNull()
   })
+  it('shows a visible placeholder for a deleted linked character and can remove the link', () => {
+    const store = makeStore({
+      timeline: [{ id: 'a', title: 'Founding', date: 0, eraId: 'old', linkedCharacters: ['c', 'ghost'] }],
+      selectedTimelineEventId: 'a',
+    })
+    render(<Timeline store={store} />)
+    expect(screen.getAllByText(/Deleted character/).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByText('Remove link'))
+    expect(store.updateEvent).toHaveBeenCalledWith('a', { linkedCharacters: ['c'] })
+  })
+
+  it('clears a stale filter when an entry hidden by it is opened from elsewhere', () => {
+    const store = makeStore()
+    const { rerender } = render(<Timeline store={store} />)
+    fireEvent.change(screen.getByLabelText('Search events'), { target: { value: 'Founding' } })
+    expect(screen.queryByText('Later')).toBeNull()
+    rerender(<Timeline store={{ ...store, selectedTimelineEventId: 'b' }} />)
+    expect(screen.getByLabelText('Search events').value).toBe('')
+    expect(screen.getAllByText('Later').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: 'Edit', exact: true })).toBeTruthy()
+  })
 })

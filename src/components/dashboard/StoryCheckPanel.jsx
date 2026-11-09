@@ -100,11 +100,9 @@ export default function StoryCheckPanel({ store }) {
                       Open {item.label}
                     </button>
                   ))}
-                  {kind !== 'info' && (
-                    <button type="button" className="story-check-link" onClick={() => dismiss(finding)}>
-                      Mark intentional
-                    </button>
-                  )}
+                  <button type="button" className="story-check-link" onClick={() => dismiss(finding)}>
+                    {kind === 'info' ? 'Dismiss' : 'Mark intentional'}
+                  </button>
                 </div>
               </li>
             ))}
@@ -152,7 +150,7 @@ export default function StoryCheckPanel({ store }) {
       <div className="story-check-footer">
         {result.dismissed.length > 0 && (
           <button type="button" className="story-check-link" onClick={() => setShowDismissed(open => !open)} aria-expanded={showDismissed}>
-            {showDismissed ? 'Hide' : 'Show'} {result.dismissed.length} marked intentional
+            {showDismissed ? 'Hide' : 'Show'} {result.dismissed.length} dismissed or intentional
           </button>
         )}
         <button type="button" className="story-check-link" onClick={() => setShowRules(open => !open)} aria-expanded={showRules}>
