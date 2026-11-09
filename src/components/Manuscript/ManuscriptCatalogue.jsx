@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import Modal from '../shared/Modal'
 
-const countWords = value => value?.trim().match(/\S+/g)?.length || 0
+import { countWords } from '../../utils/dailyWords'
 
 function formatWhen(value) {
   if (!value) return ''

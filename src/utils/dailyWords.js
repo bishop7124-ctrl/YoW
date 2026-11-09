@@ -15,6 +15,9 @@ export const countSceneWords = value => {
   if (!value || typeof value !== 'string') return 0
   return value.trim().match(/\S+/g)?.length || 0
 }
+// The one word-count rule for manuscript text (whitespace-separated tokens). Every screen that shows scene
+// words, and every place that records them, uses this; src/utils/wordCountSingleSource.test.js enforces it.
+export const countWords = countSceneWords
 
 // Counting a whole scene on every call is the hot cost here (this runs on each
 // save in the editor, and per-day helpers call it repeatedly). Cache by scene id
@@ -40,6 +43,19 @@ export const toDateKey = value => {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+// The one rule for recording a scene's words in its history when its text is saved: today's entry is replaced,
+// a new day appends one, and only the latest MAX_HISTORY_ENTRIES are kept. Used by both the editor's draft
+// safety-net write and the store's normal save, so they can never record different numbers.
+export const nextWordHistory = (history, content, now = Date.now()) => {
+  const list = Array.isArray(history) ? [...history] : []
+  const today = toDateKey(now)
+  const entry = { date: today, words: countSceneWords(content), timestamp: now }
+  const lastIndex = list.findLastIndex(item => item.date === today)
+  return lastIndex >= 0
+    ? list.map((item, index) => (index === lastIndex ? entry : item))
+    : [...list, entry].slice(-MAX_HISTORY_ENTRIES)
 }
 
 export const getSceneTimestamp = scene => {

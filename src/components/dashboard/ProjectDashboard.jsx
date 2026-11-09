@@ -4,7 +4,7 @@ import { getEnabledSections, getProjectTypeStage } from '../../constants/project
 import { useUserMediaUrl } from '../../utils/useUserMediaUrl'
 import { relativeTimeFromNow } from '../../utils/relativeTime'
 import { buildWritingGoalStreak, withDailyGoalHistory } from '../../utils/writingStreak'
-import { dailyWordsForScenes, getSceneHistory, getSceneTimestamp } from '../../utils/dailyWords'
+import { countWords, dailyWordsForScenes, getSceneHistory, getSceneTimestamp } from '../../utils/dailyWords'
 import StoryCheckPanel from './StoryCheckPanel'
 
 const formatNumber = (value) => new Intl.NumberFormat().format(value || 0)
@@ -30,7 +30,6 @@ const PROJECT_STATUS_LABELS = {
   revision: 'Editing',
 }
 
-const countWords = value => value?.trim().match(/\S+/g)?.length || 0
 const formatProjectStatus = status => PROJECT_STATUS_LABELS[status] || status || 'Drafting'
 const formatCompletion = value => `${Math.round(value || 0)}%`
 const pluralize = (count, singular, plural = `${singular}s`) => `${formatNumber(count)} ${count === 1 ? singular : plural}`

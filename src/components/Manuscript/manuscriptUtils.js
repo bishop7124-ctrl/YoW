@@ -143,18 +143,8 @@ export function useDebouncedCallback(callback, delay) {
 
 export const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
-export const countWords = value => {
-  if (!value || typeof value !== 'string') return 0
-  return value.trim().match(/\S+/g)?.length || 0
-}
-
-export const dateKey = value => {
-  const date = new Date(value)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
+// Re-exported so existing imports keep working; the definitions live in src/utils/dailyWords.js.
+export { countWords, dateKey }
 
 // This is a crash-safety net on top of the normal 400ms-debounced store commit
 // (see updateSceneContent/commitLocal in useStore.js): it protects the handful
@@ -186,24 +176,17 @@ const lastVersionSnapshotAt = new Map() // sceneId -> timestamp
 function runPersistSceneDraft(scene, content) {
   try {
     const now = Date.now()
-    const today = dateKey(now)
     writeItem('nf_localWriteAt', String(now))
     const scenes = JSON.parse(readItem('nf_scenes') || '[]')
     if (!Array.isArray(scenes)) return undefined
 
     const nextScenes = scenes.map(item => {
       if (item.id !== scene.id) return item
-      const history = Array.isArray(item.wordHistory) ? [...item.wordHistory] : []
-      const entry = { date: today, words: countWords(content), timestamp: now }
-      const lastIndex = history.findLastIndex(day => day.date === today)
-      const wordHistory = lastIndex >= 0
-        ? history.map((day, index) => index === lastIndex ? entry : day)
-        : [...history, entry].slice(-120)
-      return { ...item, content, lastModified: now, wordHistory }
+      return { ...item, content, lastModified: now, wordHistory: nextWordHistory(item.wordHistory, content, now) }
     })
 
     if (!nextScenes.some(item => item.id === scene.id)) {
-      nextScenes.push({ ...scene, content, lastModified: now, wordHistory: [{ date: today, words: countWords(content), timestamp: now }] })
+      nextScenes.push({ ...scene, content, lastModified: now, wordHistory: nextWordHistory([], content, now) })
     }
     const raw = JSON.stringify(nextScenes)
     writeItem('nf_scenes', raw)
@@ -401,7 +384,7 @@ export function formatShortDate(dateStr) {
 // Daily net-word logic lives in src/utils/dailyWords.js (shared with the Overview
 // dashboard). Re-exported here so existing imports keep working.
 export { sceneNetByDate, totalWordsOnDate, dailyWordsForScenes } from '../../utils/dailyWords'
-import { dailyWordsForScenes as dailyWordsOnce, wordsOnDates } from '../../utils/dailyWords'
+import { dailyWordsForScenes as dailyWordsOnce, wordsOnDates, countWords, toDateKey as dateKey, nextWordHistory } from '../../utils/dailyWords'
 
 export function computeStreak(scenes) {
   const today = todayKey()

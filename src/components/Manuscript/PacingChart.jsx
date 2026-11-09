@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 
-const countWords = str => str?.trim().match(/\S+/g)?.length || 0
+import { countWords } from '../../utils/dailyWords'
 
 export default function PacingChart({ scenes, chapters, acts, activeNovelId, onOpenScene, onClose }) {
   const [mode, setMode] = useState('scene')

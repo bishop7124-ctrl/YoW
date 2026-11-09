@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback, useSyncExternalStore
 import { getProjectType } from '../../constants/projectTypes'
 import { BREAKPOINT_MS_OVERLAY, useMediaQuery } from '../../utils/useMediaQuery'
 import ManuscriptRail from './ManuscriptRail.jsx'
+import { countWords } from '../../utils/dailyWords'
 import AIStar from '../ai/AIStar'
 import ManuscriptInspector from './ManuscriptInspector.jsx'
 import ManuscriptTopbar from './ManuscriptTopbar.jsx'
@@ -129,10 +130,6 @@ const SESSION_RECAP_FIELDS = [
 const filledFields = (source, fields) =>
   fields.filter(field => String(source?.[field.key] || '').trim()).length
 
-const countWords = content => {
-  const trimmed = content?.trim()
-  return trimmed ? trimmed.split(/\s+/).filter(Boolean).length : 0
-}
 
 function CampaignSessionWorkflow({ chapter, encounters, labels, projectType, onUpdateChapter }) {
   const plan = chapter.sessionPlan || {}

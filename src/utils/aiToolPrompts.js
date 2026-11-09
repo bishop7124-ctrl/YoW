@@ -1,5 +1,6 @@
 // Modular prompt builders for AI Tools (Plot Hole, Lore Conflict, Style Consistency, Character Interview)
 import { getProjectType } from '../constants/projectTypes'
+import { countWords } from './dailyWords'
 import { formatOutlineChapterTitle } from './outlineDisplay'
 
 const MAX_CONTENT_CHARS = 1200
@@ -164,7 +165,7 @@ function orderedScenesForProject(scenes, chapters, acts) {
 }
 
 function sceneWordCount(scene) {
-  return (scene?.content || '').trim().match(/\S+/g)?.length || 0
+  return countWords(scene?.content)
 }
 
 function summariseSceneMap(scenes, chapters, acts) {

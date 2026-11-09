@@ -19,6 +19,7 @@ import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
 import { clearSceneVersions } from '../utils/sceneVersions'
 import { markCloudScenesDeleted, markCloudNovelDeleted } from '../utils/cloudSceneVersions'
 import { scenesWithoutLinks } from '../utils/sceneLinks'
+import { countWords, nextWordHistory } from '../utils/dailyWords'
 import {
   LOCAL_WRITE_FAILED_KEY,
   markLocalWriteFailed,
@@ -190,17 +191,6 @@ const save = (key, val) => {
   }
 }
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
-const countWords = value => {
-  if (!value || typeof value !== 'string') return 0
-  return value.trim().match(/\S+/g)?.length || 0
-}
-const dateKey = value => {
-  const date = new Date(value)
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
 
 const SYNC_CATEGORY_CONFIG = {
   characters: { storageKey: 'nf_characters', titleField: 'name' },
@@ -392,17 +382,9 @@ const buildSampleProjectData = () => {
   }
 }
 
-const withSceneContentHistory = (scene, content, now = Date.now()) => {
-  const today = dateKey(now)
-  const wordCount = countWords(content)
-  const history = Array.isArray(scene.wordHistory) ? [...scene.wordHistory] : []
-  const lastIndex = history.findLastIndex(entry => entry.date === today)
-  const entry = { date: today, words: wordCount, timestamp: now }
-  const wordHistory = lastIndex >= 0
-    ? history.map((item, index) => index === lastIndex ? entry : item)
-    : [...history, entry].slice(-120)
-  return { ...scene, content, lastModified: now, wordHistory }
-}
+const withSceneContentHistory = (scene, content, now = Date.now()) => (
+  { ...scene, content, lastModified: now, wordHistory: nextWordHistory(scene.wordHistory, content, now) }
+)
 
 const createSceneConflictCopy = (scene, now = Date.now()) => ({
   ...scene,

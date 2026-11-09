@@ -1,4 +1,5 @@
 import { readItem, writeItem, removeItem, listKeys } from '../storage/projectStorage'
+import { countWords } from './dailyWords'
 
 // Each scene's version-history snapshots live under their own
 // `nf_scene_versions:<sceneId>` key, instead of one shared `nf_scene_versions`
@@ -107,7 +108,7 @@ export function saveSceneVersion(scene, source = 'auto') {
   if (!scene?.id) return
   const existing = loadForScene(scene.id)
   const latest = existing[0]
-  const wordCount = scene.content?.trim().match(/\S+/g)?.length || 0
+  const wordCount = countWords(scene.content)
 
   // Skip duplicate if content hasn't changed since last snapshot
   if (latest && latest.content === (scene.content || '') && latest.title === (scene.title || '')) return

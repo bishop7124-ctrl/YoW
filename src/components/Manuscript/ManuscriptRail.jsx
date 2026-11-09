@@ -2,13 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SCENE_STATUSES, nextStatus } from './manuscriptUtils.js'
 import { formatOutlineChapterTitle, getOutlineSceneTitle, sortOutlineItems } from '../../utils/outlineDisplay.js'
 import ParentMoveSelect from '../shared/ParentMoveSelect.jsx'
+import { countWords } from '../../utils/dailyWords'
 
 // ─── Word count helpers ───────────────────────────────────────────────────────
 
-const countWords = (content) => {
-  if (!content?.trim()) return 0
-  return content.trim().split(/\s+/).filter(Boolean).length
-}
 
 const fmtWords = (n) => {
   if (!n) return ''

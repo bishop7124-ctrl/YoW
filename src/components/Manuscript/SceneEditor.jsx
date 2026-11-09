@@ -6,6 +6,7 @@ import {
   useDebouncedCallback, persistSceneDraftToLocalStorage, uid,
   copyTextToClipboard, stripNoteMarkers, NOTE_MARKER_RE, LARGE_SCENE_CHAR_THRESHOLD,
 } from './manuscriptUtils.js'
+import { countWords } from '../../utils/dailyWords'
 import { useCaretComfortScroll } from './useCaretComfortScroll.js'
 import { useTextareaCaretRect } from './useTextareaCaretRect.js'
 import { useTabPresence } from '../../utils/useTabPresence.js'
@@ -1132,10 +1133,7 @@ const SceneEditorImpl = ({
   // inline word count already used. Recomputing a full split/trim on every
   // keystroke for a large scene would reintroduce exactly the typing-lag cost
   // this file's virtualization/debouncing exists to avoid.
-  const wordCount = useMemo(() => {
-    const trimmed = scene.content?.trim()
-    return trimmed ? trimmed.split(/\s+/).filter(Boolean).length : 0
-  }, [scene.content])
+  const wordCount = useMemo(() => countWords(scene.content), [scene.content])
   const sortedNotes = useMemo(
     () => [...(scene.notes || [])].sort((a, b) => (a.anchorOffset ?? 0) - (b.anchorOffset ?? 0) || a.seq - b.seq),
     [scene.notes]
