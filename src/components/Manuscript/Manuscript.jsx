@@ -1242,7 +1242,7 @@ export default function Manuscript({ store, userId, membership = null }) {
       }
       if (!meta) return
       if (event.key === '\\') { event.preventDefault(); setRailCollapsed(v => !v); return }
-      if (event.key.toLowerCase() === 'f' && !activeFinalizedDraft) { event.preventDefault(); handleToggleSurface('search'); return }
+      if (event.key.toLowerCase() === 'f' && !event.shiftKey && !activeFinalizedDraft) { event.preventDefault(); handleToggleSurface('search'); return }
       if (event.key.toLowerCase() === 'j') { event.preventDefault(); handleOpenLastSurface(); return }
     }
     document.addEventListener('keydown', handler)

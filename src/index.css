@@ -24856,3 +24856,43 @@ body {
 .ms-vh-deleted-name { font-size: 13px; font-weight: 600; color: var(--text-main); overflow-wrap: anywhere; }
 .ms-vh-deleted-meta { font-size: 11px; color: var(--text-muted); }
 .ms-vh-deleted-list .ms-vh-restore-btn { justify-self: start; margin-top: 4px; }
+/* Global search + Connections (A3) */
+.gs-overlay { position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.55); display: flex; justify-content: center; align-items: flex-start; padding: 8vh 16px 16px; }
+.gs-dialog { width: min(680px, 100%); max-height: min(78vh, 720px); display: flex; flex-direction: column; background: var(--bg-nav, var(--bg-main)); color: var(--text-main); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 24px 60px rgba(0,0,0,.5); overflow: hidden; }
+.gs-input-row { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--border); color: var(--text-muted); }
+.gs-input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: var(--text-main); font: inherit; font-size: 16px; }
+.gs-close { background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--text-muted); font: inherit; font-size: 11px; padding: 3px 8px; min-height: 28px; cursor: pointer; }
+.gs-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.gs-chip { background: none; border: 1px solid var(--border); border-radius: 999px; color: var(--text-muted); font: inherit; font-size: 12px; padding: 3px 10px; min-height: 28px; cursor: pointer; }
+.gs-chip.is-active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.gs-results { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 6px; }
+.gs-hint { margin: 0; padding: 14px 10px; font-size: 13px; line-height: 1.5; color: var(--text-muted); }
+.gs-result { display: flex; align-items: stretch; gap: 6px; border-radius: 8px; border: 1px solid transparent; }
+.gs-result.is-active { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.gs-result-main { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: flex-start; text-align: left; background: none; border: 0; padding: 8px 10px; color: inherit; font: inherit; cursor: pointer; }
+.gs-type { flex: 0 0 auto; min-width: 72px; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); padding-top: 3px; }
+.gs-result-text { display: grid; gap: 2px; min-width: 0; }
+.gs-result-title { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.gs-result-sub { font-size: 12px; color: var(--text-muted); }
+.gs-snippet { font-size: 12px; line-height: 1.45; color: var(--text-muted); overflow-wrap: anywhere; }
+.gs-snippet em { font-style: normal; font-weight: 700; }
+.gs-dialog mark { background: color-mix(in srgb, var(--accent) 30%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+.gs-conn-btn { align-self: center; flex: 0 0 auto; background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--accent); font: inherit; font-size: 12px; padding: 4px 8px; min-height: 30px; margin-right: 6px; cursor: pointer; }
+.gs-footer { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 8px 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); }
+.gs-footer kbd { font: inherit; font-size: 10px; border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; }
+.gs-connections { display: flex; flex-direction: column; min-height: 0; }
+.gs-conn-head { padding: 12px 16px; border-bottom: 1px solid var(--border); display: grid; gap: 4px; }
+.gs-back { justify-self: start; background: none; border: 0; padding: 4px 0; min-height: 32px; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.gs-conn-title { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.gs-conn-sub { margin: 0; font-size: 12px; color: var(--text-muted); }
+.gs-conn-body { overflow-y: auto; overscroll-behavior: contain; padding: 8px 12px 14px; display: grid; gap: 12px; }
+.gs-conn-group h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+.gs-conn-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.gs-conn-item { width: 100%; display: flex; align-items: baseline; gap: 10px; text-align: left; background: none; border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; min-height: 36px; color: inherit; font: inherit; cursor: pointer; }
+.gs-conn-item:hover, .gs-conn-item:focus-visible { border-color: var(--accent); }
+.gs-conn-name { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.gs-conn-note { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+.gs-conn-missing { display: block; border: 1px dashed var(--danger, #d9534f); border-radius: 8px; padding: 7px 10px; font-size: 13px; color: var(--danger, #d9534f); }
+.gs-conn-missing em { font-style: normal; opacity: .85; }
+.studio-search-btn svg { flex: none; }
+@media (max-width: 640px) { .gs-overlay { padding: 8px; } .gs-dialog { max-height: 92vh; } .gs-footer { display: none; } .gs-type { min-width: 64px; } }

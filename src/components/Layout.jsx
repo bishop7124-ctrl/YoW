@@ -5,6 +5,7 @@ import AIAssistant from './ai/AIAssistant'
 import AIStar from './ai/AIStar'
 import Characters from './characters/Characters'
 const FamilyTree = lazy(() => import('./familytree/FamilyTree'))
+const GlobalSearch = lazy(() => import('./search/GlobalSearch'))
 const RelationshipMap = lazy(() => import('./relationships/RelationshipMap'))
 import Factions from './Factions/Factions'
 import Lore from './lore/Lore'
@@ -931,6 +932,7 @@ export default function Layout({
 
   const [aiOpen, setAiOpen] = useState(false)
   const [recordConflictReviewOpen, setRecordConflictReviewOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
   const isMobileViewport = useIsMobile()
   const [openSectionTourId, setOpenSectionTourId] = useState(null)
 
@@ -977,6 +979,27 @@ export default function Layout({
       if (first) setSection(first.id)
     }
   }, [store.activeNovel?.enabledSections])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Project search shortcuts: "/" (outside text fields), Ctrl/Cmd+Shift+F anywhere, and Ctrl/Cmd+K in the
+  // planning views (in the manuscript, Ctrl/Cmd+K is the editor's own go-to-scene palette).
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.defaultPrevented || event.isComposing) return
+      const meta = event.metaKey || event.ctrlKey
+      const key = (event.key || '').toLowerCase()
+      const target = event.target
+      const typing = target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+      const wantsSearch =
+        (meta && event.shiftKey && key === 'f') ||
+        (meta && !event.shiftKey && !event.altKey && key === 'k' && viewMode !== 'writing') ||
+        (!meta && !event.altKey && event.key === '/' && !typing)
+      if (!wantsSearch) return
+      event.preventDefault()
+      setSearchOpen(open => !open)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [viewMode])
 
   useEffect(() => {
     const handleTeleport = (e) => {
@@ -1109,6 +1132,16 @@ export default function Layout({
         topBar={null}
         utilityContent={(
           <div className="studio-utility-btns">
+            <button
+              type="button"
+              className={`studio-utility-btn studio-search-btn${searchOpen ? ' is-active' : ''}`}
+              onClick={() => setSearchOpen(true)}
+              aria-label="Search this project"
+              aria-keyshortcuts="/ Control+Shift+F Meta+Shift+F"
+              title="Search this project ( / or Ctrl/Cmd+Shift+F )"
+            >
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+            </button>
             {localModeBubble && (
               <button
                 type="button"
@@ -1240,6 +1273,12 @@ export default function Layout({
           </div>
         </StudioWorkspace>
       </StudioFrame>
+
+      {searchOpen && (
+        <Suspense fallback={null}>
+          <GlobalSearch store={store} enabledSectionIds={enabledSectionIds} onClose={() => setSearchOpen(false)} />
+        </Suspense>
+      )}
 
       {projectSettingsOpen && (
         <ProjectSettings
