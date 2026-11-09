@@ -54,6 +54,16 @@ export function recentPace(dailyWords, today = localDateKey()) {
   return wordsInRange(dailyWords, from, today) / PACE_WINDOW_DAYS
 }
 
+// How many of the last 14 days had any writing. Fewer than this and a projection is guesswork.
+export function activeDaysInWindow(dailyWords, today = localDateKey()) {
+  let n = 0
+  for (let i = 0; i < PACE_WINDOW_DAYS; i++) {
+    if ((Number(dailyWords?.[shiftDateKey(today, -i)]) || 0) > 0) n++
+  }
+  return n
+}
+const MIN_ACTIVE_DAYS_FOR_PROJECTION = 3
+
 export function buildGoalProgress({ dailyWords = {}, goals = {}, totalWords = 0, today = localDateKey() } = {}) {
   const weekStart = weekStartKey(today)
   const weekEnd = shiftDateKey(weekStart, 6)
@@ -86,11 +96,14 @@ export function buildGoalProgress({ dailyWords = {}, goals = {}, totalWords = 0,
       const finishText = projected ? `around ${projected}` : 'in more than ten years'
       let status = 'no-pace'
       let message = `${remainingWords.toLocaleString()} words to go, about ${requiredPerDay.toLocaleString()} a day. Write a little to see a projection.`
-      if (pace > 0) {
+      if (pace > 0 && activeDaysInWindow(dailyWords, today) < MIN_ACTIVE_DAYS_FOR_PROJECTION) {
+        status = 'no-pace'
+        message = `${remainingWords.toLocaleString()} words to go, about ${requiredPerDay.toLocaleString()} a day to finish by then. Once you have written on a few different days, this will show whether your pace gets you there.`
+      } else if (pace > 0) {
         status = pace >= requiredPerDay ? 'on-track' : 'behind'
         message = status === 'on-track'
-          ? `On track: at your recent pace of ${Math.round(pace).toLocaleString()} words a day you would finish ${finishText}.`
-          : `Behind: you need about ${requiredPerDay.toLocaleString()} words a day, and your recent pace is ${Math.round(pace).toLocaleString()}. At that pace you would finish ${finishText}.`
+          ? `On track: at your 14-day average of ${Math.round(pace).toLocaleString()} words a day (days off count as zero) you would finish ${finishText}.`
+          : `Behind: you need about ${requiredPerDay.toLocaleString()} words a day, and over the last 14 days you averaged ${Math.round(pace).toLocaleString()} (days off count as zero). At that pace you would finish ${finishText}.`
       }
       deadline = { ...base, requiredPerDay, projectedFinish: projected, status, message }
     }

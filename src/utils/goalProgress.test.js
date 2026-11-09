@@ -56,7 +56,7 @@ describe('recent pace', () => {
 
 describe('deadline projection', () => {
   const pace = Object.fromEntries(Array.from({ length: 14 }, (_, i) => [`2026-11-${String(11 - (i % 11)).padStart(2, '0')}`, 0]))
-  const steady = { '2026-11-11': 1400 } // pace 100/day
+  const steady = { '2026-11-11': 400, '2026-11-10': 500, '2026-11-09': 500 } // pace 100/day over three writing days
   it('reports on track when the recent pace meets what is needed', () => {
     const p = buildGoalProgress({ dailyWords: steady, goals: { manuscript: 10000, deadline: '2027-03-01' }, totalWords: 8000, today: TODAY })
     expect(p.deadline.status).toBe('on-track')
@@ -70,10 +70,19 @@ describe('deadline projection', () => {
     expect(p.deadline.message).toMatch(/Behind/)
   })
   it('does not print a date decades away for a tiny pace', () => {
-    const p = buildGoalProgress({ dailyWords: { '2026-11-11': 14 }, goals: { manuscript: 90000, deadline: '2026-12-31' }, totalWords: 0, today: TODAY })
+    const p = buildGoalProgress({ dailyWords: { '2026-11-11': 5, '2026-11-10': 5, '2026-11-09': 4 }, goals: { manuscript: 90000, deadline: '2026-12-31' }, totalWords: 0, today: TODAY })
     expect(p.deadline.status).toBe('behind')
     expect(p.deadline.projectedFinish).toBeNull()
     expect(p.deadline.message).toMatch(/more than ten years/)
+  })
+  it('does not warn "behind" off a single writing day: it explains it needs a few days of history', () => {
+    const p = buildGoalProgress({ dailyWords: { '2026-11-11': 454 }, goals: { manuscript: 90000, deadline: '2027-08-31' }, totalWords: 454, today: TODAY })
+    expect(p.deadline.status).toBe('no-pace')
+    expect(p.deadline.message).toMatch(/few different days/)
+  })
+  it('explains that days off count as zero in the pace it quotes', () => {
+    const p = buildGoalProgress({ dailyWords: { '2026-11-11': 400, '2026-11-10': 500, '2026-11-09': 500 }, goals: { manuscript: 10000, deadline: '2026-11-21' }, totalWords: 8000, today: TODAY })
+    expect(p.deadline.message).toMatch(/days off count as zero/)
   })
   it('says there is no projection without recent writing, instead of guessing', () => {
     const p = buildGoalProgress({ dailyWords: pace, goals: { manuscript: 10000, deadline: '2026-12-31' }, totalWords: 100, today: TODAY })

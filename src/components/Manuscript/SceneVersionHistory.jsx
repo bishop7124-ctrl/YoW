@@ -261,7 +261,7 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
                         {cloudActive && (
                           <span className="ms-vh-item-title-tag">{v.where === 'device' ? 'This device only' : 'In your account'}</span>
                         )}
-                        {v.title && <span className="ms-vh-item-title-tag">{v.title}</span>}
+                        {v.title && v.title !== scene?.title && <span className="ms-vh-item-title-tag">{v.title}</span>}
                       </div>
                     </button>
                     <button

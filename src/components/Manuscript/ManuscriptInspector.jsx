@@ -328,7 +328,7 @@ function ProgressTab({ scenes, chapters, writingGoals, onUpdateGoals }) {
         <div className="ms-insp-bar"><div style={{ width: `${dailyPct}%` }} /></div>
         <div className="ms-insp-goal-meta">
           <span>{goalStreak.enabled ? `${goalStreak.currentStreak}-day goal streak` : 'Goal streak off'}</span>
-          <span>{avgWordsPerDay > 0 ? `${avgWordsPerDay.toLocaleString()} avg / day` : ''}</span>
+          <span>{avgWordsPerDay > 0 ? `${avgWordsPerDay.toLocaleString()} avg / writing day` : ''}</span>
         </div>
       </div>
 
