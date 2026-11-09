@@ -1,5 +1,18 @@
 # YOW Deferred QA Plan
 
+## 2026-11-09 Project search and Connections (owner, A3)
+
+Free for every plan, no flag and no migration. Checked in the browser (offline sample project) at desktop and phone width; not checked on real data or on the live site.
+
+1. Open any project. Click the magnifying glass in the top bar: a search box opens. Press Esc: it closes.
+2. Shortcuts (focus anywhere that is not a text box): `/` opens it and `/` again closes it. `Ctrl/Cmd+Shift+F` opens it from anywhere, including inside the manuscript editor. `Ctrl/Cmd+K` opens it in Overview, Characters, Lore and the other planning views (in the manuscript, Ctrl/Cmd+K is still the editor's own go-to-scene box, and Ctrl/Cmd+F is still search inside the manuscript). Typing `/` inside a text field must still just type a slash.
+3. Type a character's name. The character should be the first result, with matching words highlighted. Try a place name, a lore title, and a phrase that only appears in your scene text: the scene should be listed with a snippet. Use the type chips (Characters, Scenes, ...) to filter.
+4. Use the Up/Down arrows and Enter to open a result: it should take you to that record (character, location, lore, timeline event, idea, scene, and so on) with it selected.
+5. On a character, location, lore entry, timeline event or faction result, click "Connections" (or press Shift+Enter): you should see everything linked to it, grouped (family, relationships, faction, locations, lore, timeline, scenes that mention it). Click an item to open it; Esc goes back to the results.
+6. Find a record with a link to something you deleted (Story Check's "link to a record that no longer exists" finding points at one): its Connections should show a red dashed "Deleted character/location" line.
+7. On your phone (or a narrow window): the button and the search box should fit, with no sideways scrolling.
+8. Tell Claude anything that ranks oddly or that you expected to find and could not (for example a record type that is not searched).
+
 ## 2026-11-09 Cloud scene history (owner, A2)
 
 Code is merged behind the `cloud_scene_history` flag (off for everyone). Migrations: `20261109120000_scene_versions.sql` (applied by the owner) and `20261109130000_scene_versions_batch_and_sweep.sql` (**apply this one too**; the batch-delete call and the orphan sweep need it). A scratch-Postgres run of both (`supabase/tests/scene_versions.pglite.mjs`, 39 checks) passed; nothing below has been run against the live database yet.

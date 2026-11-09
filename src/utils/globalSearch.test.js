@@ -53,6 +53,18 @@ describe('searchIndex', () => {
     expect(mira.find(r => r.id === 'c2').matchField).toBe('Bio')
   })
 
+  it('lists the character before events that merely start with the same word', () => {
+    const local = buildSearchIndex({
+      activeNovelId: 'n',
+      characters: [{ id: 'c', novelId: 'n', name: 'Captain Garrick Thorn' }],
+      timeline: [{ id: 't', novelId: 'n', title: 'Garrick ambushes the convoy' }],
+    })
+    expect(searchIndex(local, 'garrick').map(r => r.type)).toEqual(['character', 'timeline'])
+    // an exact title still wins over the bonus
+    const exact = buildSearchIndex({ activeNovelId: 'n', characters: [{ id: 'c', novelId: 'n', name: 'Garrick Thorn' }], timeline: [{ id: 't', novelId: 'n', title: 'Garrick' }] })
+    expect(searchIndex(exact, 'garrick')[0].type).toBe('timeline')
+  })
+
   it('requires every word and is case-insensitive', () => {
     expect(find('RED pines').map(r => r.id)).toEqual(expect.arrayContaining(['l1', 'f1', 'c1']))
     expect(find('red zebra')).toEqual([])

@@ -89,39 +89,39 @@ export default function GlobalSearch({ store, enabledSectionIds = null, onClose 
   const chips = ['all', ...SEARCH_TYPE_ORDER.filter(type => counts[type])]
 
   return (
-    <div className="gs-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="psearch-overlay" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose() }}>
       <div
         ref={dialogRef}
-        className="gs-dialog"
+        className="psearch-dialog"
         role="dialog"
         aria-modal="true"
         aria-label={connectionsFor ? `Connections for ${connectionsFor.title}` : 'Search this project'}
         onKeyDown={onKeyDown}
       >
         {connectionsFor ? (
-          <div className="gs-connections">
-            <div className="gs-conn-head">
-              <button type="button" className="gs-back" onClick={() => { setConnectionsFor(null); inputRef.current?.focus() }}>← Back to results</button>
-              <h2 className="gs-conn-title">Connections for {connectionsFor.title}</h2>
-              <p className="gs-conn-sub">
+          <div className="psearch-connections">
+            <div className="psearch-conn-head">
+              <button type="button" className="psearch-back" onClick={() => { setConnectionsFor(null); inputRef.current?.focus() }}>← Back to results</button>
+              <h2 className="psearch-conn-title">Connections for {connectionsFor.title}</h2>
+              <p className="psearch-conn-sub">
                 {connections.total === 0 ? 'Nothing is linked to this record yet.' : `${connections.total} linked ${connections.total === 1 ? 'item' : 'items'}`}
                 {connections.missing > 0 ? ` · ${connections.missing} link${connections.missing === 1 ? '' : 's'} to deleted records` : ''}
               </p>
             </div>
-            <div className="gs-conn-body">
+            <div className="psearch-conn-body">
               {connections.groups.map(group => (
-                <section key={group.name} className="gs-conn-group" aria-label={group.name}>
+                <section key={group.name} className="psearch-conn-group" aria-label={group.name}>
                   <h3>{group.name} ({group.items.length})</h3>
                   <ul>
                     {group.items.map((item, i) => (
                       <li key={`${item.type}:${item.id || 'missing'}:${i}`}>
                         {item.missing ? (
-                          <span className="gs-conn-missing">⚠ {item.title} <em>— this link points at a record that no longer exists</em></span>
+                          <span className="psearch-conn-missing">⚠ {item.title} <em>— this link points at a record that no longer exists</em></span>
                         ) : (
-                          <button type="button" className="gs-conn-item" onClick={() => open(item)}>
-                            <span className="gs-type">{SEARCH_TYPES[item.type]?.singular || item.type}</span>
-                            <span className="gs-conn-name">{item.title}</span>
-                            {item.note && <span className="gs-conn-note">{item.note}</span>}
+                          <button type="button" className="psearch-conn-item" onClick={() => open(item)}>
+                            <span className="psearch-type">{SEARCH_TYPES[item.type]?.singular || item.type}</span>
+                            <span className="psearch-conn-name">{item.title}</span>
+                            {item.note && <span className="psearch-conn-note">{item.note}</span>}
                           </button>
                         )}
                       </li>
@@ -133,11 +133,11 @@ export default function GlobalSearch({ store, enabledSectionIds = null, onClose 
           </div>
         ) : (
           <>
-            <div className="gs-input-row">
+            <div className="psearch-input-row">
               <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
               <input
                 ref={inputRef}
-                className="gs-input"
+                className="psearch-input"
                 type="text"
                 role="combobox"
                 aria-expanded={results.length > 0}
@@ -150,16 +150,16 @@ export default function GlobalSearch({ store, enabledSectionIds = null, onClose 
                 autoComplete="off"
                 spellCheck="false"
               />
-              <button type="button" className="gs-close" onClick={onClose} aria-label="Close search">Esc</button>
+              <button type="button" className="psearch-close" onClick={onClose} aria-label="Close search">Esc</button>
             </div>
 
             {query.trim() && chips.length > 1 && (
-              <div className="gs-chips" role="group" aria-label="Filter by type">
+              <div className="psearch-chips" role="group" aria-label="Filter by type">
                 {chips.map(type => (
                   <button
                     key={type}
                     type="button"
-                    className={`gs-chip${typeFilter === type ? ' is-active' : ''}`}
+                    className={`psearch-chip${typeFilter === type ? ' is-active' : ''}`}
                     aria-pressed={typeFilter === type}
                     onClick={() => { setTypeFilter(type); setActiveIndex(0) }}
                   >
@@ -169,29 +169,29 @@ export default function GlobalSearch({ store, enabledSectionIds = null, onClose 
               </div>
             )}
 
-            <div className="gs-results" id={listId} role="listbox" aria-label="Search results">
+            <div className="psearch-results" id={listId} role="listbox" aria-label="Search results">
               {!query.trim() && (
-                <p className="gs-hint">
+                <p className="psearch-hint">
                   Searches everything in this project: names, descriptions, lore, timeline, notes and your scene text. It runs on your device.
                 </p>
               )}
-              {query.trim() && results.length === 0 && <p className="gs-hint">No matches for “{query.trim()}”.</p>}
+              {query.trim() && results.length === 0 && <p className="psearch-hint">No matches for “{query.trim()}”.</p>}
               {results.map((result, i) => (
                 <div
                   key={result.key}
                   id={`${listId}-opt-${i}`}
                   role="option"
                   aria-selected={i === safeActive}
-                  className={`gs-result${i === safeActive ? ' is-active' : ''}`}
+                  className={`psearch-result${i === safeActive ? ' is-active' : ''}`}
                   onMouseMove={() => { if (i !== safeActive) setActiveIndex(i) }}
                 >
-                  <button type="button" className="gs-result-main" tabIndex={-1} onClick={() => open(result)}>
-                    <span className="gs-type">{SEARCH_TYPES[result.type].singular}</span>
-                    <span className="gs-result-text">
-                      <span className="gs-result-title"><Highlighted parts={highlightParts(result.title, terms)} /></span>
-                      {result.subtitle && <span className="gs-result-sub">{result.subtitle}</span>}
+                  <button type="button" className="psearch-result-main" tabIndex={-1} onClick={() => open(result)}>
+                    <span className="psearch-type">{SEARCH_TYPES[result.type].singular}</span>
+                    <span className="psearch-result-text">
+                      <span className="psearch-result-title"><Highlighted parts={highlightParts(result.title, terms)} /></span>
+                      {result.subtitle && <span className="psearch-result-sub">{result.subtitle}</span>}
                       {result.snippet && (
-                        <span className="gs-snippet">
+                        <span className="psearch-snippet">
                           {result.matchField && <em>{result.matchField}: </em>}
                           <Highlighted parts={result.snippet} />
                         </span>
@@ -201,7 +201,7 @@ export default function GlobalSearch({ store, enabledSectionIds = null, onClose 
                   {CONNECTION_TYPES.has(result.type) && (
                     <button
                       type="button"
-                      className="gs-conn-btn"
+                      className="psearch-conn-btn"
                       tabIndex={-1}
                       onClick={() => setConnectionsFor({ type: result.type, id: result.id, title: result.title })}
                     >
@@ -212,7 +212,7 @@ export default function GlobalSearch({ store, enabledSectionIds = null, onClose 
               ))}
             </div>
 
-            <div className="gs-footer" aria-hidden="true">
+            <div className="psearch-footer" aria-hidden="true">
               <span><kbd>↑</kbd> <kbd>↓</kbd> to move</span>
               <span><kbd>Enter</kbd> opens</span>
               <span><kbd>Shift</kbd>+<kbd>Enter</kbd> connections</span>

@@ -61,10 +61,13 @@ export function buildSearchIndex(store, { enabledSections = null } = {}) {
   const entries = []
   const add = (type, record, title, subtitle, fields, extra = {}) => {
     if (!record?.id || !allowed(type)) return
-    entries.push({
+    const entry = {
       key: `${type}:${record.id}`, type, id: record.id, title: plainText(title) || `Untitled ${SEARCH_TYPES[type].singular.toLowerCase()}`,
       subtitle: plainText(subtitle), fields: clean(fields), ...extra,
-    })
+    }
+    // Lower-cased once here so a keystroke does not re-lowercase every scene's full text.
+    entry.haystack = [entry.title, entry.subtitle, ...entry.fields.map(item => item.text)].join(' \n ').toLowerCase()
+    entries.push(entry)
   }
 
   inProject(store.characters).forEach(c => add('character', c, c.name, c.titleJob || c.role || c.occupation, [
@@ -96,6 +99,7 @@ export function buildSearchIndex(store, { enabledSections = null } = {}) {
 }
 
 const norm = text => text.toLowerCase()
+const NAME_RECORD_BONUS = { character: 20, faction: 15, location: 15, lore: 10 }
 
 // How well the title matches: exact > starts with > a word starts with > contains. 0 = no match.
 function titleScore(title, q) {
@@ -172,7 +176,7 @@ export function searchIndex(entries, query, { types = null, limit = 80 } = {}) {
   const results = []
   for (const entry of entries) {
     if (types && !types.includes(entry.type)) continue
-    const haystack = norm([entry.title, entry.subtitle, ...entry.fields.map(item => item.text)].join(' \n '))
+    const haystack = entry.haystack ?? norm([entry.title, entry.subtitle, ...entry.fields.map(item => item.text)].join(' \n '))
     if (!terms.every(term => haystack.includes(term))) continue
 
     let score = titleScore(entry.title, phrase)
@@ -180,6 +184,9 @@ export function searchIndex(entries, query, { types = null, limit = 80 } = {}) {
       const perTerm = terms.map(term => titleScore(entry.title, term))
       score = perTerm.every(Boolean) ? Math.min(...perTerm) - 10 : 0
     }
+    // Records people look up by name (characters, places, factions, lore) outrank events and notes that
+    // merely start with the same word, so "garrick" lists the character before "Garrick ambushes...".
+    if (score >= 50 && score < 100) score = Math.min(99, score + (NAME_RECORD_BONUS[entry.type] || 0))
     let matchField = null
     if (!score) {
       for (const item of entry.fields) {
