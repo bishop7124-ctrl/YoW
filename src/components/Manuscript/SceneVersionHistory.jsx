@@ -1,5 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { getSceneVersions, clearSceneVersions, deleteSceneVersion } from '../../utils/sceneVersions'
+import {
+  useCloudSceneHistoryActive, listCloudSceneVersions, fetchCloudVersionContent, deleteCloudSceneVersion,
+  clearCloudSceneVersions, listRecentlyDeletedScenes, sceneVersionHash,
+} from '../../utils/cloudSceneVersions'
 
 function deleteVersion(id, sceneId) {
   try { deleteSceneVersion(id, sceneId) } catch { /* ignore */ }
@@ -24,17 +28,59 @@ function formatTimestamp(ts) {
 // deliberately NOT included — it's a genuine irreversible bulk delete, not
 // named in the spec's undo-toast list, and there is no prior state left to
 // undo to once the snapshots themselves are gone.
-export default function SceneVersionHistory({ scene, onRestore, onClose, onToast, embedded = false }) {
-  const [versions, setVersions] = useState([])
+export default function SceneVersionHistory({ scene, onRestore, onClose, onToast, embedded = false, activeNovelId = null, onRecoverScene = null }) {
+  const [localVersions, setLocalVersions] = useState([])
+  const [cloudVersions, setCloudVersions] = useState([])
+  const [localHashes, setLocalHashes] = useState({})
+  const [cloudContent, setCloudContent] = useState({})
   const [previewId, setPreviewId] = useState(null)
   const [confirmClear, setConfirmClear] = useState(false)
+  const [showDeleted, setShowDeleted] = useState(false)
+  const [deletedScenes, setDeletedScenes] = useState(null)
+  const [recovering, setRecovering] = useState(null)
   const overlayRef = useRef(null)
+  const cloudActive = useCloudSceneHistoryActive()
 
   const reload = useCallback(() => {
-    if (scene?.id) setVersions(getSceneVersions(scene.id))
+    if (scene?.id) setLocalVersions(getSceneVersions(scene.id))
   }, [scene?.id])
 
   useEffect(() => { reload() }, [reload])
+
+  // Account copies (only when cloud history is active for this signed-in account).
+  const sceneId = scene?.id
+  const reloadCloud = useCallback(async () => {
+    if (!sceneId || !cloudActive) { setCloudVersions([]); return }
+    setCloudVersions(await listCloudSceneVersions(sceneId))
+  }, [sceneId, cloudActive])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!sceneId || !cloudActive) return undefined
+    listCloudSceneVersions(sceneId).then(list => { if (!cancelled) setCloudVersions(list) })
+    return () => { cancelled = true }
+  }, [sceneId, cloudActive])
+
+  // Match device snapshots to account copies by the same content hash the server stores.
+  useEffect(() => {
+    let cancelled = false
+    if (!cloudActive || localVersions.length === 0) return undefined
+    Promise.all(localVersions.map(async v => [v.id, await sceneVersionHash(v.title, v.content)]))
+      .then(pairs => { if (!cancelled) setLocalHashes(Object.fromEntries(pairs)) })
+    return () => { cancelled = true }
+  }, [cloudActive, localVersions])
+
+  const versions = useMemo(() => {
+    if (!cloudActive) return localVersions.map(v => ({ ...v, where: 'device' }))
+    const cloudByHash = new Map(cloudVersions.map(v => [v.hash, v]))
+    const localHashSet = new Set(localVersions.map(v => localHashes[v.id]).filter(Boolean))
+    const merged = localVersions.map(v => {
+      const twin = cloudByHash.get(localHashes[v.id])
+      return twin ? { ...v, where: 'both', cloudId: twin.cloudId } : { ...v, where: 'device' }
+    })
+    cloudVersions.forEach(v => { if (!localHashSet.has(v.hash)) merged.push({ ...v, where: 'account' }) })
+    return merged.sort((a, b) => b.timestamp - a.timestamp)
+  }, [cloudActive, localVersions, cloudVersions, localHashes])
 
   useEffect(() => {
     const onKey = e => {
@@ -53,28 +99,66 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
     onClose()
   }, [onClose, confirmClear])
 
-  const handleDeleteOne = useCallback((id) => {
-    deleteVersion(id, scene?.id)
-    if (previewId === id) setPreviewId(null)
+  const handleDeleteOne = useCallback(async (version) => {
+    if (version.where !== 'account') deleteVersion(version.id, scene?.id)
+    if (version.cloudId) await deleteCloudSceneVersion(version.cloudId)
+    if (previewId === version.id) setPreviewId(null)
     reload()
-  }, [previewId, reload, scene?.id])
+    reloadCloud()
+  }, [previewId, reload, reloadCloud, scene?.id])
 
-  const handleClearAll = useCallback(() => {
+  const handleClearAll = useCallback(async () => {
     clearSceneVersions(scene?.id)
+    if (cloudActive) await clearCloudSceneVersions(scene?.id)
     setPreviewId(null)
     setConfirmClear(false)
     reload()
-  }, [scene?.id, reload])
+    reloadCloud()
+  }, [scene?.id, cloudActive, reload, reloadCloud])
 
   const handleRestore = useCallback((version) => {
-    if (!scene) return
+    if (!scene || typeof version.content !== 'string') return
     const previous = { sceneId: scene.id, content: scene.content || '', title: scene.title || '' }
-    onRestore(version)
+    onRestore({ ...version, sceneId: scene.id })
     onToast?.('Restored an earlier version.', { undo: () => onRestore(previous) })
     onClose()
   }, [scene, onRestore, onToast, onClose])
 
-  const preview = previewId ? versions.find(v => v.id === previewId) : null
+  const previewBase = previewId ? versions.find(v => v.id === previewId) : null
+  useEffect(() => {
+    if (!previewBase || previewBase.where !== 'account' || cloudContent[previewBase.cloudId]) return undefined
+    let cancelled = false
+    fetchCloudVersionContent(previewBase.cloudId).then(got => {
+      if (!cancelled) setCloudContent(prev => ({ ...prev, [previewBase.cloudId]: got || { failed: true } }))
+    })
+    return () => { cancelled = true }
+  }, [previewBase, cloudContent])
+  const preview = previewBase && previewBase.where === 'account'
+    ? { ...previewBase, failed: Boolean(cloudContent[previewBase.cloudId]?.failed), content: cloudContent[previewBase.cloudId]?.content, title: cloudContent[previewBase.cloudId]?.title ?? previewBase.title }
+    : previewBase
+
+  // Recently deleted scenes (account copies kept 30 days).
+  const canRecover = cloudActive && typeof onRecoverScene === 'function' && Boolean(activeNovelId)
+  useEffect(() => {
+    let cancelled = false
+    if (!showDeleted || !canRecover) return undefined
+    listRecentlyDeletedScenes(activeNovelId).then(list => { if (!cancelled) setDeletedScenes(list) })
+    return () => { cancelled = true }
+  }, [showDeleted, canRecover, activeNovelId])
+
+  const handleRecover = useCallback(async (item) => {
+    setRecovering(item.sceneId)
+    const got = await fetchCloudVersionContent(item.cloudId)
+    const recovered = got ? await onRecoverScene({ title: got.title || item.title, content: got.content }) : false
+    if (recovered) {
+      // The old copy is deliberately left in place (it expires on its own after 30 days).
+      setDeletedScenes(list => (list || []).filter(entry => entry.sceneId !== item.sceneId))
+      onToast?.('Recovered the scene as a new scene.')
+    } else {
+      onToast?.('Could not recover that scene.')
+    }
+    setRecovering(null)
+  }, [onRecoverScene, onToast])
 
   const panel = (
       <div className={`ms-vh-panel${embedded ? ' ms-vh-panel--embedded' : ''}`} tabIndex={-1}>
@@ -82,7 +166,11 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
           <div>
             <div className="ms-vh-title">Version History</div>
             <div className="ms-vh-subtitle">{scene?.title || 'Scene'}</div>
-            <div className="ms-vh-subtitle ms-vh-device-note">Saved on this device only — not synced to your account or other devices.</div>
+            <div className="ms-vh-subtitle ms-vh-device-note">
+              {cloudActive
+                ? 'Recent versions are kept on this device and in your account: the latest 20, plus one a day for 30 days.'
+                : 'Saved on this device only — not synced to your account or other devices.'}
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {versions.length > 0 && (
@@ -128,12 +216,15 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
                       <div className="ms-vh-item-meta">
                         {i === 0 && <span className="ms-vh-badge">Latest</span>}
                         <span>{v.wordCount.toLocaleString()} words</span>
+                        {cloudActive && (
+                          <span className="ms-vh-item-title-tag">{v.where === 'device' ? 'This device only' : 'In your account'}</span>
+                        )}
                         {v.title && <span className="ms-vh-item-title-tag">{v.title}</span>}
                       </div>
                     </button>
                     <button
                       className="ms-vh-delete-btn"
-                      onClick={e => { e.stopPropagation(); handleDeleteOne(v.id) }}
+                      onClick={e => { e.stopPropagation(); handleDeleteOne(v) }}
                       title="Delete this version"
                       aria-label="Delete this version"
                     >
@@ -156,13 +247,23 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
                       <button
                         className="ms-vh-restore-btn"
                         onClick={() => handleRestore(preview)}
+                        disabled={preview.content === undefined}
                         title="Applies immediately — undo from the toast"
                       >
                         Restore this version
                       </button>
                     </div>
                     <div className="ms-vh-preview-text">
-                      {preview.content || <em style={{ opacity: 0.4 }}>Empty scene</em>}
+                      {preview.failed
+                        ? (
+                          <em style={{ opacity: 0.7 }}>
+                            Could not load this version right now.{' '}
+                            <button type="button" className="ms-vh-deleted-toggle" onClick={() => setCloudContent(prev => { const next = { ...prev }; delete next[preview.cloudId]; return next })}>Try again</button>
+                          </em>
+                        )
+                        : preview.content === undefined
+                        ? <em style={{ opacity: 0.5 }}>Loading…</em>
+                        : preview.content || <em style={{ opacity: 0.4 }}>Empty scene</em>}
                     </div>
                   </>
                 ) : (
@@ -175,13 +276,38 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
           )}
         </div>
 
+        {canRecover && (
+          <div className="ms-vh-deleted">
+            <button type="button" className="ms-vh-deleted-toggle" aria-expanded={showDeleted} onClick={() => setShowDeleted(open => !open)}>
+              Recently deleted scenes
+            </button>
+            {showDeleted && (
+              deletedScenes === null ? <p className="ms-vh-deleted-note">Loading…</p>
+                : deletedScenes.length === 0 ? <p className="ms-vh-deleted-note">No deleted scenes in the last 30 days.</p>
+                  : (
+                    <ul className="ms-vh-deleted-list">
+                      {deletedScenes.map(item => (
+                        <li key={item.sceneId}>
+                          <span className="ms-vh-deleted-name">{item.title || 'Untitled scene'}</span>
+                          <span className="ms-vh-deleted-meta">{item.wordCount.toLocaleString()} words · deleted {formatTimestamp(item.deletedAt)}</span>
+                          <button type="button" className="ms-vh-restore-btn" disabled={recovering === item.sceneId} onClick={() => handleRecover(item)}>
+                            {recovering === item.sceneId ? 'Recovering…' : 'Recover as new scene'}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+            )}
+          </div>
+        )}
+
         {/* Clear all confirmation */}
         {confirmClear && (
           <div className="ms-vh-confirm-overlay">
             <div className="ms-vh-confirm-box">
               <div className="ms-vh-confirm-title">Clear all versions?</div>
               <p className="ms-vh-confirm-body">
-                This will permanently delete all {versions.length} saved version{versions.length !== 1 ? 's' : ''} for this scene. This cannot be undone.
+                This will permanently delete all {versions.length} saved version{versions.length !== 1 ? 's' : ''} for this scene{cloudActive ? ', on this device and in your account' : ''}. This cannot be undone.
               </p>
               <div className="ms-vh-confirm-actions">
                 <button className="btn btn-secondary" onClick={() => setConfirmClear(false)}>Cancel</button>

@@ -34,6 +34,11 @@ const LEGACY_STORAGE_KEY = 'nf_scene_versions'
 const MAX_VERSIONS_PER_SCENE = 50
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
+// Optional second destination for snapshots (cloud history, roadmap A2). The local write
+// always happens first and never depends on the sink; a sink that throws is ignored.
+let versionSink = null
+export function registerSceneVersionSink(sink) { versionSink = typeof sink === 'function' ? sink : null }
+
 export const sceneVersionsKey = (sceneId) => `${STORAGE_KEY_PREFIX}${sceneId}`
 export const SCENE_VERSIONS_KEY_PREFIX = STORAGE_KEY_PREFIX
 
@@ -98,7 +103,7 @@ function saveForScene(sceneId, versions) {
   } catch { console.warn('Could not save scene versions.') }
 }
 
-export function saveSceneVersion(scene) {
+export function saveSceneVersion(scene, source = 'auto') {
   if (!scene?.id) return
   const existing = loadForScene(scene.id)
   const latest = existing[0]
@@ -118,6 +123,7 @@ export function saveSceneVersion(scene) {
   }
 
   saveForScene(scene.id, [version, ...existing].slice(0, MAX_VERSIONS_PER_SCENE))
+  try { versionSink?.(version, source) } catch { /* cloud history is best effort */ }
 }
 
 export function getSceneVersions(sceneId) {

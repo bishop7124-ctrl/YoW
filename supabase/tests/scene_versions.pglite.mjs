@@ -10,7 +10,11 @@ await db.exec(`
  grant usage on schema auth to authenticated, anon; grant usage on schema public to authenticated, anon;
  insert into auth.users values ('${A}'), ('${B}');
 `)
-await db.exec(readFileSync('/Users/bishop/Desktop/Claude/yow/supabase/migrations/20261109120000_scene_versions.sql','utf8'))
+// Stand-in for the pre-existing legacy table (user_id is TEXT there).
+await db.exec('create table public.scenes (scene_id text primary key, user_id text not null, novel_id text, data jsonb)')
+const dir = new URL('../migrations/', import.meta.url)
+await db.exec(readFileSync(new URL('20261109120000_scene_versions.sql', dir), 'utf8'))
+await db.exec(readFileSync(new URL('20261109130000_scene_versions_batch_and_sweep.sql', dir), 'utf8'))
 let pass = 0, fail = 0
 const ok = (name, cond, extra='') => { cond ? pass++ : fail++; console.log(cond ? 'PASS' : 'FAIL', name, cond ? '' : extra) }
 const as = async (uid, sql, params) => {
@@ -88,6 +92,29 @@ await as(A,"select public.mark_novel_versions_deleted('n1') r")
 ok('project mark deletes by novel', (await as(A,"select count(*)::int c from public.scene_versions where deleted_at is not null")).rows[0].c === 1)
 await admin("update public.scene_versions set deleted_at = now() - interval '31 days' where scene_id='gone'")
 ok('purge removes expired', (await as(A,'select public.purge_expired_scene_versions() r')).rows[0].r === 1 && await count(A,'gone') === 0)
+
+// batch marking
+await admin('delete from public.scene_versions where user_id=$1',[A])
+await save(A,'b1','one'); await save(A,'b2','two'); await save(A,'b3','three')
+ok('batch mark deletes several scenes in one call', (await as(A,"select public.mark_scenes_versions_deleted(array['b1','b2']) r")).rows[0].r === 2)
+ok('batch mark leaves other scenes alone', (await as(A,"select count(*)::int c from public.scene_versions where deleted_at is null")).rows[0].c === 1)
+ok('batch mark cannot touch another user', (await as(B,"select public.mark_scenes_versions_deleted(array['b3']) r")).rows[0].r === 0)
+ok('batch mark rejects more than 1000 ids', !!(await as(A,"select public.mark_scenes_versions_deleted(array_fill('x'::text, array[1001])) r")).error)
+ok('anonymous cannot batch mark', await (async()=>{ await db.exec('reset role; set role anon;'); try { await db.query("select public.mark_scenes_versions_deleted(array['b1'])"); return false } catch { return true } finally { await db.exec('reset role') } })())
+
+// orphan sweep
+await admin('delete from public.scene_versions where user_id=$1',[A])
+await admin("insert into public.scenes(scene_id,user_id) values ('alive',$1)",[A])
+for (const id of ['alive','orphan-old','orphan-new']) await save(A,id,'text of '+id)
+await admin("update public.scene_versions set created_at = now() - interval '20 days' where scene_id in ('alive','orphan-old')")
+await as(A,'select public.purge_expired_scene_versions()')
+const flagged = (await admin("select scene_id from public.scene_versions where user_id=$1 and deleted_at is not null order by 1",[A])).map(r=>r.scene_id)
+ok('sweep marks only old scenes that are gone from the cloud', JSON.stringify(flagged) === '["orphan-old"]', JSON.stringify(flagged))
+ok('sweep never touches a scene that still exists', (await admin("select deleted_at from public.scene_versions where scene_id='alive'"))[0].deleted_at === null)
+ok('sweep never touches a recently edited scene', (await admin("select deleted_at from public.scene_versions where scene_id='orphan-new'"))[0].deleted_at === null)
+await admin("update public.scene_versions set deleted_at = now() - interval '31 days' where scene_id='orphan-old'")
+await as(A,'select public.purge_expired_scene_versions()')
+ok('swept versions are purged after 30 days', await count(A,'orphan-old') === 0)
 
 // account deletion cascade
 await save(A,'cas','keep me?')

@@ -153,7 +153,7 @@ export default function ManuscriptSearch({
     const scene = novelScenes.find(s => s.id === sceneId)
     if (!scene || !regex) return null
     const previousContent = scene.content || ''
-    saveSceneVersion(scene)
+    saveSceneVersion(scene, 'replace')
     const r = buildRegex(term, matchCase, wholeWord)
     const newContent = previousContent.replace(r, replacement)
     onReplaceInScene(sceneId, newContent)

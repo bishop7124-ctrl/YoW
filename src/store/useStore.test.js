@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { useStore } from './useStore.js'
 import { loadLocalFirstSnapshot, saveStorageMode, STORAGE_MODES } from '../utils/storageMode.js'
+import { markCloudScenesDeleted, markCloudNovelDeleted } from '../utils/cloudSceneVersions.js'
 import { upsertItems, mergeItems, saveSceneDoc, deleteItem, deleteSceneDoc, deleteProjectData, replaceUserData, getUserStorageUsage } from '../utils/firestoreSync.js'
 import { familyRelationshipMapEdges } from '../utils/familyRelationships.js'
 import { deleteUserMedia } from '../utils/uploadUserMedia.js'
@@ -30,6 +31,10 @@ vi.mock('../utils/firestoreSync', () => {
   getUserStorageUsage: vi.fn().mockResolvedValue(0),
   }
 })
+vi.mock('../utils/cloudSceneVersions', () => ({
+  markCloudScenesDeleted: vi.fn(),
+  markCloudNovelDeleted: vi.fn(),
+}))
 vi.mock('../utils/projectStats', () => ({
   buildProjectStats: vi.fn().mockReturnValue({}),
 }))
@@ -2865,6 +2870,65 @@ describe('outline structure integrity', () => {
     expect(result.current.writingSceneId).toBeNull()
     expect(result.current.selectedSceneId).toBeNull()
     expect(result.current.deleteChapter(outlineChapter.id)).toBe(false)
+  })
+})
+
+describe('cloud scene history: deletions keep versions as "recently deleted"', () => {
+  const setup = () => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n', title: 'Outline', type: 'novel' }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n'))
+    vi.mocked(markCloudScenesDeleted).mockClear()
+    vi.mocked(markCloudNovelDeleted).mockClear()
+    return renderHook(() => useStore(null))
+  }
+  const build = result => {
+    let a, c1, c2, s1, s2, s3
+    act(() => { a = result.current.addAct('Act') })
+    act(() => { c1 = result.current.addChapter(a.id, 'One'); c2 = result.current.addChapter(a.id, 'Two') })
+    act(() => { s1 = result.current.addScene(c1.id, 'A'); s2 = result.current.addScene(c1.id, 'B'); s3 = result.current.addScene(c2.id, 'C') })
+    return { a, c1, c2, s1, s2, s3 }
+  }
+
+  it('deleting a scene marks only that scene', () => {
+    const { result } = setup()
+    const { s1 } = build(result)
+    act(() => { result.current.deleteScene(s1.id) })
+    expect(markCloudScenesDeleted).toHaveBeenCalledWith([s1.id])
+  })
+
+  it('deleting a chapter marks exactly its scenes', () => {
+    const { result } = setup()
+    const { c1, s1, s2 } = build(result)
+    act(() => { result.current.deleteChapter(c1.id) })
+    expect(vi.mocked(markCloudScenesDeleted).mock.calls[0][0].slice().sort()).toEqual([s1.id, s2.id].sort())
+  })
+
+  it('deleting an act marks every scene under it', () => {
+    const { result } = setup()
+    const { a, s1, s2, s3 } = build(result)
+    act(() => { result.current.deleteAct(a.id) })
+    expect(vi.mocked(markCloudScenesDeleted).mock.calls[0][0].slice().sort()).toEqual([s1.id, s2.id, s3.id].sort())
+  })
+
+  it('a refused delete marks nothing', () => {
+    const { result } = setup()
+    build(result)
+    act(() => { result.current.deleteScene('missing'); result.current.deleteChapter('missing') })
+    expect(markCloudScenesDeleted).not.toHaveBeenCalled()
+  })
+
+  it('retiring the manuscript marks the replaced scenes (the new starter scenes have new ids)', () => {
+    const { result } = setup()
+    const { s1, s2, s3 } = build(result)
+    act(() => { result.current.retireManuscript('Old draft') })
+    const marked = vi.mocked(markCloudScenesDeleted).mock.calls.at(-1)[0].slice().sort()
+    expect(marked).toEqual([s1.id, s2.id, s3.id].sort())
+  })
+
+  it('deleting a project marks its versions deleted', async () => {
+    const { result } = setup()
+    await act(async () => { await result.current.deleteNovel('n') })
+    expect(markCloudNovelDeleted).toHaveBeenCalledWith('n')
   })
 })
 

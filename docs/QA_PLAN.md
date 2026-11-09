@@ -1,5 +1,19 @@
 # YOW Deferred QA Plan
 
+## 2026-11-09 Cloud scene history (owner, A2)
+
+Code is merged behind the `cloud_scene_history` flag (off for everyone). Migrations: `20261109120000_scene_versions.sql` (applied by the owner) and `20261109130000_scene_versions_batch_and_sweep.sql` (**apply this one too**; the batch-delete call and the orphan sweep need it). A scratch-Postgres run of both (`supabase/tests/scene_versions.pglite.mjs`, 39 checks) passed; nothing below has been run against the live database yet.
+
+1. Apply the second migration in the SQL editor. Check: `select proname from pg_proc where proname = 'mark_scenes_versions_deleted';` returns one row.
+2. Turn the flag on for yourself only: `insert into public.feature_flags (key, enabled, allow_user_ids) values ('cloud_scene_history', true, array['<your-user-uuid>']::uuid[]);`
+3. Signed in with a cloud-synced account, open a scene and type for over a minute. Check in SQL: `select scene_id, source, word_count, created_at from public.scene_versions order by created_at desc limit 5;` shows a row for that scene.
+4. Open Version history for the scene. Rows should be labelled "In your account" (and "This device only" for any older local-only ones). Preview one, restore it, then use the Undo toast.
+5. Sign in on a second browser or device (clear site data first) and open the same scene's Version history: the account versions should be listed and previewable.
+6. Delete a scene that has history. Open Version history on another scene, expand "Recently deleted scenes": the deleted scene should be listed. Recover it: a new scene appears in that scene's chapter with the text. (The old copy stays listed in SQL until it expires.)
+7. Isolation: sign in as a second account and confirm `select count(*) from public.scene_versions` through the app (history panel) never shows the first account's scenes.
+8. Turn the flag off (`update public.feature_flags set enabled = false where key = 'cloud_scene_history';`): the panel goes back to "Saved on this device only", and typing/saving is unaffected.
+9. After about a month, review growth: `select count(*), pg_size_pretty(sum(octet_length(content))) from public.scene_versions;`
+
 ## 2026-11-08 Feature-flag migration and daily-words consolidation (owner, A0)
 
 Not run by the agent: needs a real Supabase project and a browser. Apply `supabase/migrations/20261108130000_feature_flags.sql` in the Supabase SQL editor (staging first if you have one). It is additive; nothing in the app reads flags yet, so applying it changes nothing visible.

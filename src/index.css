@@ -24848,3 +24848,11 @@ body {
 .tl2-link--missing { color: var(--danger, #d9534f); border: 1px dashed currentColor; background: transparent; }
 .tl2-panel-missing { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 4px 10px; border: 1px dashed var(--danger, #d9534f); border-radius: 999px; font-size: 12px; color: var(--danger, #d9534f); }
 .tl2-panel-missing-remove { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.ms-vh-deleted { border-top: 1px solid var(--project-border, var(--border)); padding: 10px 16px; display: grid; gap: 8px; }
+.ms-vh-deleted-toggle { justify-self: start; background: none; border: 0; padding: 4px 0; min-height: 32px; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.ms-vh-deleted-note { margin: 0; font-size: 12px; color: var(--text-muted); }
+.ms-vh-deleted-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-height: 200px; overflow-y: auto; }
+.ms-vh-deleted-list li { display: grid; gap: 2px; border: 1px solid var(--project-border, var(--border)); border-radius: 8px; padding: 8px 10px; }
+.ms-vh-deleted-name { font-size: 13px; font-weight: 600; color: var(--text-main); overflow-wrap: anywhere; }
+.ms-vh-deleted-meta { font-size: 11px; color: var(--text-muted); }
+.ms-vh-deleted-list .ms-vh-restore-btn { justify-self: start; margin-top: 4px; }

@@ -83,7 +83,7 @@ export default function ManuscriptSurface({
   // Search pane
   scenes, chapters, acts, activeNovelId, onOpenScene, onReplaceInScene,
   // History pane
-  historyScene, onRestoreVersion,
+  historyScene, onRestoreVersion, onRecoverScene,
   // Finalise pane
   labels, finaliseStats, isNovelProject, finalizedDrafts, onFinalise, onOpenFinalizedDraft, onOpenCatalogue,
   onExport, exporting, exportButtonLabel,
@@ -134,6 +134,8 @@ export default function ManuscriptSurface({
             embedded
             scene={historyScene}
             onRestore={onRestoreVersion}
+            onRecoverScene={onRecoverScene}
+            activeNovelId={activeNovelId}
             onClose={onClose}
             onToast={onToast}
           />

@@ -17,6 +17,7 @@ import { replaceItemsAtomically, listKeys, loadValue, readItem, writeItem, remov
 import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, sceneTrackedChangesKey } from '../storage/sceneContentStore'
 import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
 import { clearSceneVersions } from '../utils/sceneVersions'
+import { markCloudScenesDeleted, markCloudNovelDeleted } from '../utils/cloudSceneVersions'
 import {
   LOCAL_WRITE_FAILED_KEY,
   markLocalWriteFailed,
@@ -2742,6 +2743,7 @@ export function useStore(userId = null, options = {}) {
     const sceneIds = scenesRef.current.filter(s => s.novelId === projectId && chapterSet.has(s.chapterId)).map(s => s.id)
     const sceneSet = new Set(sceneIds)
     sceneIds.forEach(sceneId => { debouncedSaveScene.cancel(sceneId); clearSceneVersions(sceneId) })
+    markCloudScenesDeleted(sceneIds)
     if (canSyncCloud) {
       cloudDelete('acts', id)
       chapterIds.forEach(cId => cloudDelete('chapters', cId))
@@ -2769,6 +2771,7 @@ export function useStore(userId = null, options = {}) {
     const sceneIds = scenesRef.current.filter(s => s.novelId === projectId && s.chapterId === id).map(s => s.id)
     const sceneSet = new Set(sceneIds)
     sceneIds.forEach(sceneId => { debouncedSaveScene.cancel(sceneId); clearSceneVersions(sceneId) })
+    markCloudScenesDeleted(sceneIds)
     if (canSyncCloud) cloudDelete('chapters', id)
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => prev.filter(c => !(c.id === id && c.novelId === projectId)))
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
@@ -2799,6 +2802,7 @@ export function useStore(userId = null, options = {}) {
     // references any more (audit finding #16, docs/QA_PLAN.md's Priority -1
     // section). This single-key removal is already atomic on its own.
     clearSceneVersions(id)
+    markCloudScenesDeleted([id])
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => !(s.id === id && s.novelId === projectId)))
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
       ...character,
@@ -2886,6 +2890,8 @@ export function useStore(userId = null, options = {}) {
     const nextActs = (nextStructure.acts || []).map(act => ({ ...act, novelId: projectId }))
     const nextChapters = (nextStructure.chapters || []).map(chapter => ({ ...chapter, novelId: projectId }))
     const nextScenes = (nextStructure.scenes || []).map(scene => ({ ...scene, novelId: projectId }))
+    const keptSceneIds = new Set(nextScenes.map(scene => scene.id))
+    markCloudScenesDeleted(currentSceneIds.filter(sceneId => !keptSceneIds.has(sceneId)))
 
     commitLocal(actsRef, setActs, 'nf_acts', prev => [
       ...prev.filter(act => act.novelId !== projectId),
@@ -4119,6 +4125,7 @@ export function useStore(userId = null, options = {}) {
       knownSceneContentIdsRef.current.delete(sceneId)
       lastWrittenSceneContentByIdRef.current.delete(sceneId)
     })
+    markCloudNovelDeleted(id)
     // A restored or merged project may still reference the same object paths.
     // Only remove objects that disappeared from the complete retained snapshot.
     cleanupUnreferencedMedia(mediaUrls, nextData)

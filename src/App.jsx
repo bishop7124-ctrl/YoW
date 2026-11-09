@@ -52,6 +52,7 @@ import { getDesktopVaultInitError, retryDesktopVaultStorage } from './storage/ta
 import { clearCachedDesktopEntitlement, evaluateDesktopEntitlement, getOrCreateDesktopDeviceId, loadCachedDesktopEntitlement, verifyDesktopEntitlement } from './utils/desktopEntitlement'
 import { isFreeProjectChoiceValid, withDesktopProjectLimits } from './utils/membership'
 import { checkForDesktopUpdate } from './utils/desktopUpdater'
+import { useCloudSceneHistory } from './utils/useCloudSceneHistory'
 import { buildSaveSummary, formatSaveSummary, pruneSaveDataToProjects } from './utils/syncSummary'
 import { TABLE_CONFIG, reconcileCloudSyncData } from './utils/cloudSyncReconcile'
 import { persistReviewedCloudSyncResume } from './utils/cloudSyncResume'
@@ -269,6 +270,8 @@ function AppInner() {
     storageQuotaBytes: desktopApp ? null : devStorageExceeded ? 1 : membership.storageQuotaBytes,
     cloudSyncEnabled: membership.canSyncCloud && !effectiveLocalMode && !resumingCloudSyncAfterLapse,
   })
+  // Cloud scene history: off unless the flag is on and this account syncs to the cloud.
+  useCloudSceneHistory(userId, membership.canSyncCloud && !effectiveLocalMode && !resumingCloudSyncAfterLapse)
   const { importData, finishRemoteLoad, clearData, ensureSampleProject } = store
   const [dataLoading, setDataLoading] = useState(false)
   const [dataLoadError, setDataLoadError] = useState(false)

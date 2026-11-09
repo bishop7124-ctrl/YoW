@@ -14,6 +14,7 @@ import DocxImportModal from './DocxImportModal'
 import { mergeImportedManuscript } from './manuscriptImport.js'
 import PacingChart from './PacingChart'
 import { saveSceneVersion } from '../../utils/sceneVersions'
+import { recoverScene } from '../../utils/recoverScene'
 import { getPendingLocalWrites, subscribePendingLocalWrites } from '../../storage/writeDurability.js'
 import ComicPlanner from '../comic/ComicPlanner'
 import { SceneEditor } from './SceneEditor.jsx'
@@ -599,10 +600,20 @@ export default function Manuscript({ store, userId, membership = null }) {
     const scene = scenes.find(s => s.id === version.sceneId)
     if (!scene) return
     // Snapshot current state before restoring
-    saveSceneVersion(scene)
+    saveSceneVersion(scene, 'restore')
     updateScene(scene.id, { content: version.content, title: version.title })
     setSaveState('saving')
   }, [scenes, updateScene])
+
+  // Recover a deleted scene (cloud history, "Recently deleted"): re-creates it as a new scene
+  // in the chapter of the scene whose history is open, falling back to the first chapter.
+  const handleRecoverScene = useCallback(async ({ title, content }) => {
+    const historyScene = scenes.find(s => s.id === versionHistorySceneId)
+    const chapterId = (historyScene && chapters.some(c => c.id === historyScene.chapterId) ? historyScene.chapterId : null)
+      || chapters.find(c => c.novelId === activeNovel?.id)?.id
+    if (!chapterId) return false
+    return recoverScene({ addScene, updateScene, deleteScene, saveVersion: saveSceneVersion }, chapterId, { title, content })
+  }, [scenes, chapters, versionHistorySceneId, activeNovel?.id, addScene, updateScene, deleteScene])
 
   // Only report "saved" once the store confirms nothing is still syncing to
   // the cloud (see handleContentUpdate above for why this can't be a timer).
@@ -1667,6 +1678,7 @@ export default function Manuscript({ store, userId, membership = null }) {
           onReplaceInScene={handleReplaceInScene}
           historyScene={scenes.find(s => s.id === versionHistorySceneId) ?? null}
           onRestoreVersion={handleRestoreVersion}
+          onRecoverScene={handleRecoverScene}
           labels={labels}
           finaliseStats={manuscriptCopyStats}
           isNovelProject={isNovelProject}
