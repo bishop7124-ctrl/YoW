@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 const flag = { on: true }
 vi.mock('../../utils/useFeatureFlag', () => ({ useFeatureFlag: () => flag.on }))
@@ -93,5 +93,20 @@ describe('SceneLinksPanel', () => {
     const update = open({ ...baseScene, content: '', pov: 'tomas' })
     fireEvent.click(screen.getByText('Use'))
     expect(update).toHaveBeenCalledWith('s1', { povCharacterId: 'c2', characterIds: ['c2'] })
+  })
+
+  it('waits for a pause in typing before re-scanning the text for suggestions', () => {
+    vi.useFakeTimers()
+    try {
+      const props = { onUpdateScene: vi.fn(), characters, locations, timeline }
+      const { rerender } = render(<SceneLinksPanel scene={{ ...baseScene, content: '' }} {...props} />)
+      expect(screen.queryByLabelText('Add Tomas')).toBeNull()
+      rerender(<SceneLinksPanel scene={{ ...baseScene, content: 'Tomas arrived.' }} {...props} />)
+      expect(screen.queryByLabelText('Add Tomas')).toBeNull() // still typing: no scan yet
+      act(() => { vi.advanceTimersByTime(1300) })
+      expect(screen.getByLabelText('Add Tomas')).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

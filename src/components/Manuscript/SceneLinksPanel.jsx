@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useFeatureFlag } from '../../utils/useFeatureFlag'
 import {
   TIME_SHIFTS, getSceneLinks, suggestSceneLinks, countSuggestions, addLinkPatch, removeLinkPatch,
@@ -16,6 +16,18 @@ const GROUPS = [
   { type: 'timeline', field: 'timelineEventIds', label: 'Timeline events', addLabel: 'Add an event…' },
 ]
 const nameOf = record => record?.name || record?.title || 'Untitled'
+const SUGGEST_DELAY_MS = 1200
+
+// Scanning the whole scene for every character, place and event on each keystroke would compete with typing,
+// so suggestions follow the prose a moment after the writer pauses. Link changes still update immediately.
+function useSettledValue(value, delay) {
+  const [settled, setSettled] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+  return settled
+}
 
 export default function SceneLinksPanel({ scene, onUpdateScene, characters = [], locations = [], timeline = [] }) {
   const enabled = useFeatureFlag('scene_links')
@@ -26,10 +38,11 @@ export default function SceneLinksPanel({ scene, onUpdateScene, characters = [],
     location: new Map(locations.map(item => [item.id, item])),
     timeline: new Map(timeline.map(item => [item.id, item])),
   }), [characters, locations, timeline])
+  const settledContent = useSettledValue(scene?.content, SUGGEST_DELAY_MS)
   const suggestions = useMemo(
-    () => (enabled && scene ? suggestSceneLinks(scene, { characters, locations, timeline }) : null),
+    () => (enabled && scene ? suggestSceneLinks({ ...scene, content: settledContent }, { characters, locations, timeline }) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [enabled, scene?.id, scene?.content, scene?.title, scene?.synopsis, scene?.notes, scene?.characterIds, scene?.locationIds, scene?.timelineEventIds, scene?.dismissedLinks, scene?.pov, scene?.locationTag, scene?.povCharacterId, characters, locations, timeline],
+    [enabled, scene?.id, settledContent, scene?.title, scene?.synopsis, scene?.notes, scene?.characterIds, scene?.locationIds, scene?.timelineEventIds, scene?.dismissedLinks, scene?.pov, scene?.locationTag, scene?.povCharacterId, characters, locations, timeline],
   )
   const [yearDraft, setYearDraft] = useState(links.storyYear === null ? '' : String(links.storyYear))
   const [yearError, setYearError] = useState('')

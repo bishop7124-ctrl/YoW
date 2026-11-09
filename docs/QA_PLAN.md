@@ -1,5 +1,19 @@
 # YOW Deferred QA Plan
 
+## 2026-11-10 Scene story links and new Story Check rules (owner, A4)
+
+Behind the `scene_links` flag (off for everyone). No migration: links are extra fields on each scene, so they sync and export with the scene. Rules R9 and R10 also need `story_check` on. Checked in a browser on the offline sample project with both flags forced on; not on the live site or real data.
+
+1. Turn the flag on for yourself: `insert into public.feature_flags (key, enabled, allow_user_ids) values ('scene_links', true, array['d3795e69-dcf4-4cd4-86d0-d48149ec3ca8']::uuid[]);` then reload.
+2. Open a scene with a few named characters and places in its text, open the Inspector's Scene tab: a "Story links (Beta)" section should appear under Summary, with "Suggested from your text". Nothing should be added by itself.
+3. Click "Add" on one suggestion, "Dismiss" on another, then "Add all suggestions". Chips appear for what you confirmed; the dismissed one does not come back after a reload.
+4. Set a point-of-view character, remove a chip with the x, and add a place from the "Add a location..." box. Reload: everything is still there.
+5. Type a story year such as `40` or `300 BC` in "Story year" and click elsewhere: it should save and survive a reload. Typing something like `long ago` should show a short message and not save.
+6. Delete a character that is linked to a scene: they should disappear from that scene's links (and from point of view).
+7. Story Check (Overview > Insights): give a character a death year, set a scene's story year after it and link them to the scene: a "Possible" finding "Appears in a scene after their death" should appear, with an "Open" link to the scene. Put two scenes out of story order (later scene has an earlier year) without marking it Flashback: "Scene is set earlier than the one before it" should appear; choosing "Flashback" for that scene makes it go away.
+8. Importing a YOW backup or merging a project: scene links should point at the imported characters and places, not be lost or point at the wrong ones.
+9. Tell Claude anything that felt noisy (too many suggestions, wrong matches) or any finding that looked wrong.
+
 ## 2026-11-09 Project search and Connections (owner, A3)
 
 Free for every plan, no flag and no migration. Checked in the browser (offline sample project) at desktop and phone width; not checked on real data or on the live site.
