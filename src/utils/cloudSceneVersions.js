@@ -64,14 +64,24 @@ export function useCloudSceneHistoryPaused() {
 // Runs an RPC/query for the CURRENT user. Returns { ok, data }. A result that arrives after the
 // account changed is discarded, and a failure pauses cloud calls for five minutes.
 let lastErrorCode = ''
+// Bumps whenever the signed-in account (or the feature state) changes, so a list that was discarded because the
+// account changed mid-request can be loaded again.
+export const cloudHistoryEpoch = () => state.since
+export function useCloudHistoryEpoch() {
+  return useSyncExternalStore(
+    listener => { listeners.add(listener); return () => listeners.delete(listener) },
+    cloudHistoryEpoch,
+    () => 0,
+  )
+}
 export const lastCloudHistoryError = () => lastErrorCode
 
 async function call(run, { backoff = true } = {}) {
-  if (!usable()) return { ok: false, data: null }
+  if (!usable()) { lastErrorCode = isCloudSceneHistoryActive() ? 'paused' : 'not-signed-in'; return { ok: false, data: null } }
   const userAtStart = state.userId
   try {
     const { data, error } = await run()
-    if (userAtStart !== state.userId) return { ok: false, data: null }
+    if (userAtStart !== state.userId) { lastErrorCode = 'account-changed'; return { ok: false, data: null } }
     if (error) throw error
     lastErrorCode = ''
     return { ok: true, data }
@@ -123,6 +133,7 @@ export async function loadCloudSceneVersions(sceneId) {
     .select('id,scene_id,novel_id,title,word_count,content_hash,source,created_at')
     .eq('scene_id', String(sceneId)).is('deleted_at', null)
     .order('created_at', { ascending: false }).limit(LIST_LIMIT))
+  if (ok && !Array.isArray(data)) lastErrorCode = 'empty-response'
   return ok && Array.isArray(data) ? { ok: true, versions: data.map(toVersion) } : { ok: false, versions: [] }
 }
 export async function listCloudSceneVersions(sceneId) {

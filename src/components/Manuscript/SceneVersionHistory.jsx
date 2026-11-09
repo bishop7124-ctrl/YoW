@@ -3,7 +3,7 @@ import { getSceneVersions, clearSceneVersions, deleteSceneVersion } from '../../
 import {
   useCloudSceneHistoryActive, useCloudSceneHistoryPaused, retryCloudSceneHistoryNow, loadCloudSceneVersions,
   pushCloudSceneVersion, fetchCloudVersionContent, deleteCloudSceneVersion,
-  clearCloudSceneVersions, listRecentlyDeletedScenes, sceneVersionHash, lastCloudHistoryError,
+  clearCloudSceneVersions, listRecentlyDeletedScenes, sceneVersionHash, lastCloudHistoryError, useCloudHistoryEpoch,
 } from '../../utils/cloudSceneVersions'
 
 function deleteVersion(id, sceneId) {
@@ -59,16 +59,30 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
     if (loaded.ok) { setCloudVersions(loaded.versions); setCloudLoadedFor(sceneId) }
   }, [sceneId, cloudActive])
 
+  // A failed load (for example the account finished signing in mid-request) is retried a few times, then reported.
+  const [cloudAttempt, setCloudAttempt] = useState({ sceneId: null, failed: false })
+  const epoch = useCloudHistoryEpoch()
   useEffect(() => {
     let cancelled = false
+    let timer = null
     if (!sceneId || !cloudActive) return undefined
-    loadCloudSceneVersions(sceneId).then(loaded => {
-      if (cancelled || !loaded.ok) return
-      setCloudVersions(loaded.versions)
-      setCloudLoadedFor(sceneId)
-    })
-    return () => { cancelled = true }
-  }, [sceneId, cloudActive, cloudPaused])
+    const attempt = tries => {
+      loadCloudSceneVersions(sceneId).then(loaded => {
+        if (cancelled) return
+        if (loaded.ok) {
+          setCloudVersions(loaded.versions)
+          setCloudLoadedFor(sceneId)
+          setCloudAttempt({ sceneId, failed: false })
+        } else if (tries < 3) {
+          timer = setTimeout(() => attempt(tries + 1), 1500 * (tries + 1))
+        } else {
+          setCloudAttempt({ sceneId, failed: true })
+        }
+      })
+    }
+    attempt(0)
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [sceneId, cloudActive, cloudPaused, epoch])
 
   // Match device snapshots to account copies by the same content hash the server stores.
   useEffect(() => {
@@ -211,7 +225,9 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
               <div className="ms-vh-subtitle ms-vh-status" data-testid="vh-cloud-status">
                 {cloudLoadedFor === scene?.id
                   ? `Account: ${cloudVersions.length} saved for this scene.`
-                  : `Account: could not load${lastCloudHistoryError() ? ` (${lastCloudHistoryError()})` : ''}.`}
+                  : cloudAttempt.failed && cloudAttempt.sceneId === scene?.id
+                    ? `Account: could not load${lastCloudHistoryError() ? ` (${lastCloudHistoryError()})` : ''}.`
+                    : 'Account: loading…'}
               </div>
             )}
             {cloudActive && cloudPaused && (
