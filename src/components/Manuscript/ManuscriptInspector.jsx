@@ -9,6 +9,7 @@ import Modal from '../shared/Modal.jsx'
 import { getCharacterAge } from '../../utils/characterAge.js'
 import { buildWritingGoalStreak } from '../../utils/writingStreak.js'
 import { CharacterPortrait } from '../shared/CharacterPortrait.jsx'
+import SceneLinksPanel from './SceneLinksPanel.jsx'
 
 const TABS = [
   { id: 'scene', label: 'Scene' },
@@ -92,7 +93,7 @@ function useSceneEntities(content, entityMap) {
   }, [content, entityMap])
 }
 
-function SceneTab({ scene, onUpdateScene, characterNames, locationNames, entityMap, onEntityClick }) {
+function SceneTab({ scene, onUpdateScene, characterNames, locationNames, entityMap, onEntityClick, characters, locations, timeline }) {
   // Called unconditionally (rules-of-hooks) even when there's no active scene yet —
   // useSceneEntities itself is a no-op on empty content.
   const entities = useSceneEntities(scene?.content, entityMap)
@@ -160,6 +161,8 @@ function SceneTab({ scene, onUpdateScene, characterNames, locationNames, entityM
           />
         </label>
       </div>
+
+      <SceneLinksPanel key={scene.id} scene={scene} onUpdateScene={onUpdateScene} characters={characters} locations={locations} timeline={timeline} />
 
       {entities.length > 0 && (
         <div className="ms-insp-group">
@@ -696,6 +699,9 @@ export default function ManuscriptInspector({
             locationNames={locationNames}
             entityMap={entityMap}
             onEntityClick={onEntityClick}
+            characters={characters}
+            locations={locations}
+            timeline={timeline}
           />
         )}
         {activeTab === 'notes' && (

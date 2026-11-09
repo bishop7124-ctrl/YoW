@@ -11,7 +11,7 @@ const KIND_HELP = {
   missing: 'A check could not run because a date or value is absent or unreadable.',
   info: 'Observations about the data. Not problems.',
 }
-const OPENABLE = new Set(['character', 'timeline'])
+const OPENABLE = new Set(['character', 'timeline', 'scene'])
 const EMPTY_LIST = []
 const nowMs = () => Date.now()
 
@@ -39,6 +39,9 @@ export default function StoryCheckPanel({ store }) {
         locations: stats.locations,
         timeline: stats.timeline,
         eras: (eras || EMPTY_LIST).filter(era => era.novelId === projectId),
+        acts: stats.acts,
+        chapters: stats.chapters,
+        scenes: stats.scenes,
       },
       { dismissed, mutedRules, minParentGap },
     )

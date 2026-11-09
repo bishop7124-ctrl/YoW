@@ -22,6 +22,9 @@ export function runStoryCheck(data = {}, settings = {}) {
     locations: list(data.locations),
     timeline: list(data.timeline),
     eras: list(data.eras),
+    acts: list(data.acts),
+    chapters: list(data.chapters),
+    scenes: list(data.scenes),
   }
   const merged = { ...DEFAULT_SETTINGS, ...settings }
   const muted = new Set(list(settings.mutedRules))

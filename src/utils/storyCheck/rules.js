@@ -11,6 +11,7 @@
 //   info      - an observation, not a problem
 
 import { getTimelineYear, parseTimelineYear } from '../timelineYear.js'
+import { getSceneLinks, sceneStoryYear } from '../sceneLinks.js'
 
 export const DEFAULT_SETTINGS = { minParentGap: 12 }
 
@@ -42,6 +43,10 @@ const characterEvidence = (character, value) => ({
 })
 const eventEvidence = (event, value) => ({
   label: label(event, 'Untitled event'), recordType: 'timeline', recordId: event.id, value,
+})
+
+const sceneEvidence = (scene, value) => ({
+  label: label(scene, 'Untitled scene'), recordType: 'scene', recordId: scene.id, value,
 })
 
 const birthYear = character => parseTimelineYear(character?.birthDate)
@@ -229,7 +234,7 @@ export function ruleEventOutsideEra({ timeline, eras }) {
 }
 
 // R8 — links that point at records which no longer exist.
-export function ruleDanglingReferences({ characters, locations, timeline }) {
+export function ruleDanglingReferences({ characters, locations, timeline, scenes = [] }) {
   const characterIds = new Set(characters.map(character => character.id))
   const locationIds = new Set(locations.map(location => location.id))
   const out = []
@@ -252,6 +257,90 @@ export function ruleDanglingReferences({ characters, locations, timeline }) {
   timeline.forEach(event => {
     idList(event.linkedCharacters).forEach(id => { if (!characterIds.has(id)) dangling(event, 'timeline', 'character', id, eventEvidence) })
     idList(event.linkedLocations).forEach(id => { if (!locationIds.has(id)) dangling(event, 'timeline', 'location', id, eventEvidence) })
+  })
+  // Structured scene links (A4). Normally cleaned when a record is deleted; this catches ones that slipped
+  // through (another device, an older import).
+  const eventIds = new Set(timeline.map(event => event.id))
+  scenes.forEach(scene => {
+    const links = getSceneLinks(scene)
+    links.characterIds.forEach(id => { if (!characterIds.has(id)) dangling(scene, 'scene', 'character', id, sceneEvidence) })
+    if (links.povCharacterId && !characterIds.has(links.povCharacterId)) dangling(scene, 'scene', 'point-of-view', links.povCharacterId, sceneEvidence)
+    links.locationIds.forEach(id => { if (!locationIds.has(id)) dangling(scene, 'scene', 'location', id, sceneEvidence) })
+    links.timelineEventIds.forEach(id => { if (!eventIds.has(id)) dangling(scene, 'scene', 'timeline event', id, sceneEvidence) })
+  })
+  return out
+}
+
+// Manuscript order of scenes: act order, then chapter order within the act, then scene order within the chapter.
+// Records that are not placed (no parent) go last, in their stored order.
+const orderOf = value => (Number.isFinite(value) ? value : 0)
+function orderedScenes({ acts = [], chapters = [], scenes = [] }) {
+  const byOrder = list => list.map((item, index) => ({ item, index })).sort((a, b) => orderOf(a.item.order) - orderOf(b.item.order) || a.index - b.index).map(entry => entry.item)
+  const actRank = new Map(byOrder(acts).map((act, index) => [act.id, index]))
+  const chapterRank = new Map(byOrder(chapters).map((chapter, index) => [chapter.id, { act: actRank.has(chapter.actId) ? actRank.get(chapter.actId) : Infinity, index }]))
+  const rank = scene => {
+    const chapter = chapterRank.get(scene.chapterId)
+    return chapter ? [chapter.act, chapter.index] : [Infinity, Infinity]
+  }
+  return byOrder(scenes).map((scene, index) => ({ scene, index, rank: rank(scene) }))
+    .sort((a, b) => a.rank[0] - b.rank[0] || a.rank[1] - b.rank[1] || a.index - b.index)
+    .map(entry => entry.scene)
+}
+
+const timelineLookup = timeline => new Map(timeline.map(event => [event.id, event]))
+
+// R9 — a character linked to a scene that takes place after they died or before they were born.
+export function ruleCharacterInSceneOutsideLifetime({ characters, scenes = [], timeline }) {
+  const byId = new Map(characters.map(character => [character.id, character]))
+  const events = timelineLookup(timeline)
+  const out = []
+  scenes.forEach(scene => {
+    const year = sceneStoryYear(scene, events)
+    if (year === null) return
+    getSceneLinks(scene).characterIds.forEach(id => {
+      const character = byId.get(id)
+      if (!character) return
+      const died = deathYear(character)
+      const born = birthYear(character)
+      if (died !== null && year > died) {
+        out.push(finding({
+          ruleId: 'R9', kind: 'possible', title: 'Appears in a scene after their death',
+          explanation: `${label(character, 'A character')} died in ${died}, but ${label(scene, 'a scene')} takes place in ${year}. That can be intended (a ghost, a memory, a vision); mark it intentional if so.`,
+          evidence: [characterEvidence(character, `died ${died}`), sceneEvidence(scene, `year ${year}`)],
+          values: ['after-death', year, died],
+        }))
+      } else if (born !== null && year < born) {
+        out.push(finding({
+          ruleId: 'R9', kind: 'possible', title: 'Appears in a scene before they were born',
+          explanation: `${label(character, 'A character')} was born in ${born}, but ${label(scene, 'a scene')} takes place in ${year}.`,
+          evidence: [characterEvidence(character, `born ${born}`), sceneEvidence(scene, `year ${year}`)],
+          values: ['before-birth', year, born],
+        }))
+      }
+    })
+  })
+  return out
+}
+
+// R10 — a scene set earlier in the story than the scene before it, without being marked as a flashback.
+// Scenes marked flashback / flash-forward, and scenes with no known year, are skipped and do not move the baseline.
+export function ruleSceneOrderVsChronology({ acts = [], chapters = [], scenes = [], timeline }) {
+  const events = timelineLookup(timeline)
+  const out = []
+  let previous = null
+  orderedScenes({ acts, chapters, scenes }).forEach(scene => {
+    if (getSceneLinks(scene).timeShift) return
+    const year = sceneStoryYear(scene, events)
+    if (year === null) return
+    if (previous && year < previous.year) {
+      out.push(finding({
+        ruleId: 'R10', kind: 'possible', title: 'Scene is set earlier than the one before it',
+        explanation: `${label(scene, 'A scene')} is set in ${year}, but the scene before it (${label(previous.scene, 'a scene')}) is set in ${previous.year}. If this is a flashback, mark the scene as one; if it is intended, mark it intentional.`,
+        evidence: [sceneEvidence(previous.scene, `year ${previous.year}`), sceneEvidence(scene, `year ${year}`)],
+        values: [previous.year, year],
+      }))
+    }
+    previous = { scene, year }
   })
   return out
 }
@@ -309,5 +398,7 @@ export const RULES = [
   { id: 'R6', name: 'Child born after parent\'s death', run: ruleChildAfterParentDeath },
   { id: 'R7', name: 'Events outside their era', run: ruleEventOutsideEra },
   { id: 'R8', name: 'Broken links', run: ruleDanglingReferences },
+  { id: 'R9', name: 'Characters in scenes outside their lifetime', run: ruleCharacterInSceneOutsideLifetime },
+  { id: 'R10', name: 'Scene order against the story timeline', run: ruleSceneOrderVsChronology },
   { id: 'I', name: 'Observations', run: ruleObservations },
 ]

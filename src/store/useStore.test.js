@@ -2932,6 +2932,55 @@ describe('cloud scene history: deletions keep versions as "recently deleted"', (
   })
 })
 
+describe('structured scene links are cleaned when a record is deleted', () => {
+  const setup = () => {
+    localStorage.setItem('nf_novels', JSON.stringify([{ id: 'n', title: 'Links', type: 'novel' }]))
+    localStorage.setItem('nf_activeNovel', JSON.stringify('n'))
+    return renderHook(() => useStore(null))
+  }
+  const build = result => {
+    let a, c, s, hero, friend, place, event
+    act(() => { a = result.current.addAct('Act') })
+    act(() => { c = result.current.addChapter(a.id, 'Chapter') })
+    act(() => { s = result.current.addScene(c.id, 'Scene') })
+    act(() => { hero = result.current.saveCharacter({ name: 'Hero' }); friend = result.current.saveCharacter({ name: 'Friend' }) })
+    act(() => { place = result.current.saveLocation({ name: 'Keep' }) })
+    place = place?.id ?? place
+    act(() => { event = result.current.addEvent({ title: 'Siege', startYear: 3 }) })
+    act(() => {
+      result.current.updateScene(s.id, { characterIds: [hero, friend], povCharacterId: hero, locationIds: [place], timelineEventIds: [event.id], storyYear: 3 })
+    })
+    return { s, hero, friend, place, event }
+  }
+  const scene = (result, id) => result.current.scenes.find(item => item.id === id)
+
+  it('keeps unknown scene fields on update (links are plain additive fields)', () => {
+    const { result } = setup()
+    const { s, hero } = build(result)
+    expect(scene(result, s.id)).toMatchObject({ povCharacterId: hero, storyYear: 3 })
+  })
+
+  it('deleting a character removes them and their POV from scenes, leaving the rest', () => {
+    const { result } = setup()
+    const { s, hero, friend } = build(result)
+    act(() => { result.current.deleteCharacter(hero) })
+    expect(scene(result, s.id).characterIds).toEqual([friend])
+    expect(scene(result, s.id).povCharacterId).toBeNull()
+    expect(scene(result, s.id).locationIds).toHaveLength(1)
+  })
+
+  it('deleting a location or an event removes just that link', () => {
+    const { result } = setup()
+    const { s, place, event } = build(result)
+    act(() => { result.current.deleteLocation(place) })
+    expect(scene(result, s.id).locationIds).toEqual([])
+    expect(scene(result, s.id).timelineEventIds).toEqual([event.id])
+    act(() => { result.current.deleteEvent(event.id) })
+    expect(scene(result, s.id).timelineEventIds).toEqual([])
+    expect(scene(result, s.id).characterIds).toHaveLength(2)
+  })
+})
+
 describe('scene reorder/move cloud sync', () => {
   it('reorderScene pushes both swapped scenes to the cloud', async () => {
     vi.mocked(saveSceneDoc).mockClear()

@@ -10,13 +10,13 @@ const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const GROUP_ORDER = ['Family', 'Relationships', 'Characters', 'Faction', 'Locations', 'Lore', 'Timeline', 'History', 'Schedule', 'Chapters', 'Scenes that mention it']
 
 // Names a record can be found by in prose.
-function namesFor(type, record) {
+export function namesFor(type, record) {
   const names = [record.name || record.title].filter(Boolean)
   if (type === 'character') asArray(record.keywords).forEach(word => typeof word === 'string' && names.push(word))
   return [...new Set(names.map(name => String(name).trim()).filter(name => name.length >= 3))]
 }
 
-function mentionPattern(names) {
+export function mentionPattern(names) {
   if (!names.length) return null
   // Letters/digits on either side mean "part of another word", so "Ash" does not match "Ashford".
   // (No lookbehind: older iOS Safari cannot parse it, which would break the whole Connections view.)

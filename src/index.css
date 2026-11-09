@@ -24896,3 +24896,20 @@ body {
 .psearch-conn-missing em { font-style: normal; opacity: .85; }
 .studio-search-btn svg { flex: none; }
 @media (max-width: 640px) { .psearch-overlay { padding: 8px; } .psearch-dialog { max-height: 92vh; } .psearch-footer { display: none; } .psearch-type { min-width: 64px; } }
+/* Scene story links (A4) */
+.ms-links select { width: 100%; padding: 7px 10px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--bg-main); color: var(--text-main); font: 13px var(--font); }
+.ms-links-beta { font-style: normal; font-size: 9px; letter-spacing: .06em; text-transform: uppercase; border: 1px solid currentColor; border-radius: 999px; padding: 0 5px; margin-left: 4px; opacity: .8; }
+.ms-links-group { margin-bottom: 12px; display: grid; gap: 6px; }
+.ms-links-heading { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.ms-link-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border-radius: var(--r-pill); font-size: 12px; color: var(--text-main); background: var(--accent-fade); }
+.ms-link-chip button { background: none; border: 0; color: inherit; cursor: pointer; font-size: 14px; line-height: 1; min-width: 24px; min-height: 24px; border-radius: 50%; }
+.ms-link-chip.is-missing { background: transparent; border: 1px dashed var(--danger, #d9534f); color: var(--danger, #d9534f); }
+.ms-links-suggest { border: 1px dashed var(--border-strong, var(--border)); border-radius: var(--r-md); padding: 8px 10px; margin-bottom: 12px; display: grid; gap: 6px; }
+.ms-links-note { margin: 0; font-size: 11px; color: var(--text-muted); }
+.ms-links-suggest ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.ms-links-suggest li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; }
+.ms-links-suggest li > span { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
+.ms-links-suggest li em { font-style: normal; color: var(--text-muted); }
+.ms-links-suggest button, .ms-links-all { background: none; border: 1px solid var(--border); border-radius: var(--r-pill); color: var(--accent); font: inherit; font-size: 11px; padding: 3px 10px; min-height: 28px; cursor: pointer; }
+.ms-links-all { justify-self: start; }
+.ms-links-error { margin: 0; font-size: 11px; color: var(--danger, #d9534f); }

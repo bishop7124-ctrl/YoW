@@ -18,6 +18,7 @@ import { splitScenesForStorage, hydrateScenesFromStorage, sceneContentKey, scene
 import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
 import { clearSceneVersions } from '../utils/sceneVersions'
 import { markCloudScenesDeleted, markCloudNovelDeleted } from '../utils/cloudSceneVersions'
+import { scenesWithoutLinks } from '../utils/sceneLinks'
 import {
   LOCAL_WRITE_FAILED_KEY,
   markLocalWriteFailed,
@@ -3093,6 +3094,21 @@ export function useStore(userId = null, options = {}) {
       character.id === id ? { ...character, journey } : character
     )))
   }
+  // Deleting a character, location or event also removes it from every scene's structured links (and clears
+  // POV), the same way journey beats are cleaned. Goes through the normal single-scene update path so cloud
+  // saves and multi-tab conflict handling behave exactly as for any other scene edit.
+  const clearSceneLinksFor = (links) => {
+    const changed = scenesWithoutLinks(scenesRef.current, links)
+    if (!changed.length) return
+    commitLocal(scenesRef, setScenes, 'nf_scenes', prev => changed.reduce((scenes, { id: sceneId, patch }) => (
+      mergeSceneUpdateWithPersistedCopy(scenes, sceneId, source => {
+        const updated = { ...source, ...patch }
+        if (canSyncCloud && projectImportDepthRef.current === 0) debouncedSaveScene(sceneId, userId, updated)
+        return updated
+      })
+    ), prev))
+  }
+
   const deleteCharacter = (id, options = {}) => {
     const beforeDelete = charactersRef.current
     const deletedIds = deleteSeriesSyncedItem(charactersRef, setCharacters, 'characters', id, options)
@@ -3124,6 +3140,7 @@ export function useStore(userId = null, options = {}) {
       [comicPanelsRef, setComicPanels, 'nf_comicPanels', 'characterIds'],
     ].forEach(([ref, setter, key, field]) => commitLocal(ref, setter, key, prev => prev.map(entry => removeLinks(entry, field))))
     commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => prev.map(entry => removeLinks(entry, 'npcRelationships', rel => deletedSet.has(rel?.characterId))))
+    clearSceneLinksFor({ characterIds: [...deletedSet] })
     return true
   }
 
@@ -3226,6 +3243,7 @@ export function useStore(userId = null, options = {}) {
     const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
     if (!deletedSet.size) return true
     if (canSyncCloud) [...deletedSet].forEach(dId => cloudDelete('locations', dId))
+    clearSceneLinksFor({ locationIds: [...deletedSet] })
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => {
       return prev.map(entry => ({
         ...entry,
@@ -3354,6 +3372,7 @@ export function useStore(userId = null, options = {}) {
       ...character,
       journey: clearJourneyLinks(character.journey, { timelineEventIds: [...deletedSet] }),
     } : character))
+    clearSceneLinksFor({ timelineEventIds: [...deletedSet] })
     return true
   }
 

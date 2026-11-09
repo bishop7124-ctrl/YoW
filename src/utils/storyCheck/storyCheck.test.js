@@ -108,6 +108,68 @@ describe('R8 dangling references', () => {
   })
 })
 
+describe('R9 characters in scenes outside their lifetime', () => {
+  const characters = [ch('a', { birthDate: 'Year 10', deathDate: 'Year 50' }), ch('nodates')]
+  const sc = (id, extra = {}) => ({ id, title: `Scene ${id}`, ...extra })
+  it('flags a linked character in a scene after their death or before their birth, as possible', () => {
+    const r = runStoryCheck({ characters, scenes: [
+      sc('late', { characterIds: ['a'], storyYear: 60 }),
+      sc('early', { characterIds: ['a'], storyYear: 5 }),
+      sc('fine', { characterIds: ['a'], storyYear: 30 }),
+    ] })
+    const hits = ids(r, 'R9')
+    expect(hits.map(h => h.title).sort()).toEqual(['Appears in a scene after their death', 'Appears in a scene before they were born'])
+    expect(hits.every(h => h.kind === 'possible')).toBe(true)
+    expect(hits[0].evidence.map(e => e.recordType).sort()).toEqual(['character', 'scene'])
+  })
+  it('uses the year of the linked timeline events when the scene has no year of its own', () => {
+    const r = runStoryCheck({ characters, timeline: [ev('e', { startYear: 70 })], scenes: [sc('s', { characterIds: ['a'], timelineEventIds: ['e'] })] })
+    expect(ids(r, 'R9')).toHaveLength(1)
+  })
+  it('never guesses: no scene year, no character dates, or no link means no finding', () => {
+    expect(ids(runStoryCheck({ characters, scenes: [sc('s', { characterIds: ['a'] })] }), 'R9')).toEqual([])
+    expect(ids(runStoryCheck({ characters, scenes: [sc('s', { characterIds: ['nodates'], storyYear: 900 })] }), 'R9')).toEqual([])
+    expect(ids(runStoryCheck({ characters, scenes: [sc('s', { storyYear: 900 })] }), 'R9')).toEqual([])
+  })
+  it('a dismissed finding stays dismissed (a ghost scene)', () => {
+    const data = { characters, scenes: [sc('late', { characterIds: ['a'], storyYear: 60 })] }
+    const first = runStoryCheck(data).findings.find(f => f.ruleId === 'R9')
+    expect(runStoryCheck(data, { dismissed: { [first.fingerprint]: true } }).findings.some(f => f.ruleId === 'R9')).toBe(false)
+  })
+})
+
+describe('R10 scene order against the story timeline', () => {
+  const acts = [{ id: 'a1', order: 0 }]
+  const chapters = [{ id: 'c1', actId: 'a1', order: 0 }, { id: 'c2', actId: 'a1', order: 1 }]
+  const sc = (id, chapterId, order, extra = {}) => ({ id, title: `S${id}`, chapterId, order, ...extra })
+  const run = scenes => ids(runStoryCheck({ acts, chapters, scenes }), 'R10')
+  it('flags a scene set earlier than the scene before it, in manuscript order', () => {
+    const hits = run([sc('3', 'c2', 0, { storyYear: 5 }), sc('1', 'c1', 0, { storyYear: 10 }), sc('2', 'c1', 1, { storyYear: 20 })])
+    expect(hits).toHaveLength(1)
+    expect(hits[0].kind).toBe('possible')
+    expect(hits[0].evidence.map(e => e.recordId)).toEqual(['2', '3'])
+  })
+  it('skips flashbacks and flash-forwards and does not let them move the baseline', () => {
+    expect(run([sc('1', 'c1', 0, { storyYear: 10 }), sc('2', 'c1', 1, { storyYear: 2, timeShift: 'flashback' }), sc('3', 'c2', 0, { storyYear: 11 })])).toEqual([])
+    expect(run([sc('1', 'c1', 0, { storyYear: 10 }), sc('2', 'c1', 1, { storyYear: 90, timeShift: 'flashforward' }), sc('3', 'c2', 0, { storyYear: 11 })])).toEqual([])
+  })
+  it('ignores scenes without a known year and equal years', () => {
+    expect(run([sc('1', 'c1', 0, { storyYear: 10 }), sc('2', 'c1', 1), sc('3', 'c2', 0, { storyYear: 10 })])).toEqual([])
+  })
+})
+
+describe('R8 broken scene links', () => {
+  it('flags scene links to characters, point of view, locations and events that no longer exist', () => {
+    const r = runStoryCheck({
+      characters: [ch('a')], locations: [{ id: 'l', name: 'Keep' }], timeline: [ev('e')],
+      scenes: [{ id: 's', title: 'S', characterIds: ['a', 'gone'], povCharacterId: 'ghost', locationIds: ['l', 'lost'], timelineEventIds: ['e', 'zzz'] }],
+    })
+    const hits = ids(r, 'R8')
+    expect(hits).toHaveLength(4)
+    expect(hits.every(h => h.kind === 'confirmed' && h.evidence[0].recordType === 'scene')).toBe(true)
+  })
+})
+
 describe('observations', () => {
   it('reports undated events, overlapping eras and reversed eras', () => {
     const r = runStoryCheck({

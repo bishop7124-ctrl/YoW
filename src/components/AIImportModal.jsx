@@ -779,12 +779,18 @@ export function populateYowProject(store, data, sel) {
         targetChapterId = recoveryChapter?.id
       }
       if (!targetChapterId) continue
-      const { id: oldId, novelId: _nid, chapterId: _chapterId, title, order: _order, ...rest } = scene
+      const { id: oldId, novelId: _nid, chapterId: _chapterId, title, order: _order, characterIds, locationIds, timelineEventIds, povCharacterId, dismissedLinks: _dismissed, ...rest } = scene
       const created = store.addScene(targetChapterId, title || 'Scene')
       if (!created) continue
       sceneIdMap[oldId] = created.id
       idMap[oldId] ||= created.id
-      if (Object.keys(rest).length) store.updateScene(created.id, rest)
+      // Structured scene links point at the NEW records; a link to something that was not imported is dropped
+      // rather than left dangling at an id from the other project.
+      const mapLinks = ids => (Array.isArray(ids) ? ids.map(linkId => idMap[linkId]).filter(Boolean) : undefined)
+      const links = { characterIds: mapLinks(characterIds), locationIds: mapLinks(locationIds), timelineEventIds: mapLinks(timelineEventIds), povCharacterId: povCharacterId ? (idMap[povCharacterId] || null) : undefined }
+      Object.keys(links).forEach(key => { if (links[key] === undefined) delete links[key] })
+      const sceneFields = { ...rest, ...links }
+      if (Object.keys(sceneFields).length) store.updateScene(created.id, sceneFields)
     }
     // Comic pages/panels belong to the Volume/Issue structure imported above.
     for (const page of ord(data.comicPages)) {
