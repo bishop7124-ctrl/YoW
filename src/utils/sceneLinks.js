@@ -112,8 +112,9 @@ export function suggestSceneLinks(scene, { characters = [], locations = [], time
 export const countSuggestions = suggestions =>
   suggestions.characters.length + suggestions.locations.length + suggestions.events.length + (suggestions.pov ? 1 : 0)
 
-// The year a scene takes place: the writer's own storyYear, else the earliest year among the events it depicts.
-// Returns null when neither is known (so no rule ever guesses).
+// The year a scene takes place: the writer's own storyYear, else the year of the events it depicts when they all
+// agree. Returns null when neither is known, or when the linked events span different years (so no rule ever
+// guesses which one the scene is "really" set in).
 export function sceneStoryYear(scene, timelineById) {
   const links = getSceneLinks(scene)
   if (links.storyYear !== null) return links.storyYear
@@ -121,7 +122,7 @@ export function sceneStoryYear(scene, timelineById) {
     .map(id => timelineById?.get?.(id))
     .map(event => (event ? getTimelineYear(event) : null))
     .filter(year => Number.isFinite(year))
-  return years.length ? Math.min(...years) : null
+  return years.length && years.every(year => year === years[0]) ? years[0] : null
 }
 
 // Parses what the writer types into the year box. Empty clears it; anything unreadable is rejected.
@@ -130,6 +131,17 @@ export function parseStoryYearInput(text) {
   if (raw === '') return { ok: true, value: null }
   const year = parseTimelineYear(raw)
   return Number.isFinite(year) ? { ok: true, value: year } : { ok: false, value: null }
+}
+
+// Re-points a scene's links at newly created records when a project is imported or restored. `idMap` maps old
+// record ids to new ones; a link to a record that was not imported is dropped rather than left dangling at an
+// id from another project. Returns only the link fields to set (empty when the scene had none).
+export function remapSceneLinks(scene, idMap) {
+  const out = {}
+  const map = ids => asIds(ids).map(id => idMap?.[id]).filter(Boolean)
+  ;['characterIds', 'locationIds', 'timelineEventIds'].forEach(field => { if (Array.isArray(scene?.[field])) out[field] = map(scene[field]) })
+  if (typeof scene?.povCharacterId === 'string' && scene.povCharacterId) out.povCharacterId = idMap?.[scene.povCharacterId] || null
+  return out
 }
 
 // Removes deleted records' ids from every scene's links. Returns only the scenes that changed.

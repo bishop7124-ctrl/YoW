@@ -11,6 +11,7 @@ import {
   assertArchiveNestingDepthOk, assertPdfInputSizeOk, assertPdfRestoreMarkerSizeOk,
 } from '../utils/archiveImportLimits'
 import { YOW_EXPORT_SCHEMA_VERSION } from '../utils/projectExportHelpers'
+import { remapSceneLinks } from '../utils/sceneLinks'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -779,17 +780,14 @@ export function populateYowProject(store, data, sel) {
         targetChapterId = recoveryChapter?.id
       }
       if (!targetChapterId) continue
-      const { id: oldId, novelId: _nid, chapterId: _chapterId, title, order: _order, characterIds, locationIds, timelineEventIds, povCharacterId, dismissedLinks: _dismissed, ...rest } = scene
+      const { id: oldId, novelId: _nid, chapterId: _chapterId, title, order: _order, characterIds: _c, locationIds: _l, timelineEventIds: _t, povCharacterId: _p, dismissedLinks: _dismissed, ...rest } = scene
       const created = store.addScene(targetChapterId, title || 'Scene')
       if (!created) continue
       sceneIdMap[oldId] = created.id
       idMap[oldId] ||= created.id
       // Structured scene links point at the NEW records; a link to something that was not imported is dropped
       // rather than left dangling at an id from the other project.
-      const mapLinks = ids => (Array.isArray(ids) ? ids.map(linkId => idMap[linkId]).filter(Boolean) : undefined)
-      const links = { characterIds: mapLinks(characterIds), locationIds: mapLinks(locationIds), timelineEventIds: mapLinks(timelineEventIds), povCharacterId: povCharacterId ? (idMap[povCharacterId] || null) : undefined }
-      Object.keys(links).forEach(key => { if (links[key] === undefined) delete links[key] })
-      const sceneFields = { ...rest, ...links }
+      const sceneFields = { ...rest, ...remapSceneLinks(scene, idMap) }
       if (Object.keys(sceneFields).length) store.updateScene(created.id, sceneFields)
     }
     // Comic pages/panels belong to the Volume/Issue structure imported above.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   getSceneLinks, addLinkPatch, removeLinkPatch, dismissSuggestionPatch, setPovPatch, suggestSceneLinks,
-  countSuggestions, sceneStoryYear, parseStoryYearInput, scenesWithoutLinks,
+  countSuggestions, sceneStoryYear, parseStoryYearInput, scenesWithoutLinks, remapSceneLinks,
 } from './sceneLinks'
 
 const characters = [{ id: 'c1', name: 'Mira Ashford' }, { id: 'c2', name: 'Tomas' }, { id: 'c3', name: 'Ash' }]
@@ -73,9 +73,10 @@ describe('suggestSceneLinks', () => {
 
 describe('sceneStoryYear', () => {
   const byId = new Map(timeline.map(e => [e.id, e]))
-  it('prefers the writer\'s own year, then the earliest linked event, else null', () => {
+  it('prefers the writer\'s own year, then the linked events\' year when they agree, else null', () => {
     expect(sceneStoryYear({ storyYear: 5, timelineEventIds: ['t1'] }, byId)).toBe(5)
-    expect(sceneStoryYear({ timelineEventIds: ['t1', 't2'] }, byId)).toBe(10)
+    expect(sceneStoryYear({ timelineEventIds: ['t2'] }, byId)).toBe(10)
+    expect(sceneStoryYear({ timelineEventIds: ['t1', 't2'] }, byId)).toBeNull() // events span years: never guess
     expect(sceneStoryYear({ timelineEventIds: ['missing'] }, byId)).toBeNull()
     expect(sceneStoryYear({}, byId)).toBeNull()
   })
@@ -107,5 +108,19 @@ describe('scenesWithoutLinks', () => {
     ])
     expect(scenesWithoutLinks(scenes, {})).toEqual([])
     expect(scenesWithoutLinks(null, { characterIds: ['x'] })).toEqual([])
+  })
+})
+
+describe('remapSceneLinks', () => {
+  it('points links at the new records and drops ones that were not imported', () => {
+    const map = { c1: 'N1', l1: 'M1' }
+    expect(remapSceneLinks({ characterIds: ['c1', 'c2'], locationIds: ['l1'], timelineEventIds: ['t9'], povCharacterId: 'c1' }, map))
+      .toEqual({ characterIds: ['N1'], locationIds: ['M1'], timelineEventIds: [], povCharacterId: 'N1' })
+    expect(remapSceneLinks({ povCharacterId: 'c2' }, map)).toEqual({ povCharacterId: null })
+  })
+  it('returns nothing for a scene without links or without a map', () => {
+    expect(remapSceneLinks({ title: 'x' }, { a: 'b' })).toEqual({})
+    expect(remapSceneLinks(null, null)).toEqual({})
+    expect(remapSceneLinks({ characterIds: ['c1'] }, undefined)).toEqual({ characterIds: [] })
   })
 })

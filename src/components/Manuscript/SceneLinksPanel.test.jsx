@@ -109,4 +109,23 @@ describe('SceneLinksPanel', () => {
       vi.useRealTimers()
     }
   })
+
+  it('does not write a stale year over the saved one when the box is focused and left untouched', () => {
+    const update = vi.fn()
+    const props = { onUpdateScene: update, characters, locations, timeline }
+    const { rerender } = render(<SceneLinksPanel scene={{ ...baseScene, content: '', storyYear: 41 }} {...props} />)
+    rerender(<SceneLinksPanel scene={{ ...baseScene, content: '', storyYear: 50 }} {...props} />) // changed elsewhere
+    const input = screen.getByLabelText('Story year')
+    expect(input.value).toBe('50')
+    fireEvent.blur(input)
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('"Add all suggestions" leaves timeline events for the writer to add on purpose', () => {
+    const update = vi.fn()
+    render(<SceneLinksPanel scene={{ ...baseScene, content: 'Mira Ashford and Tomas watched The Fall of Northwatch.' }} onUpdateScene={update} characters={characters} locations={locations} timeline={timeline} />)
+    fireEvent.click(screen.getByText('Add all suggestions'))
+    expect(update.mock.calls[0][1].timelineEventIds).toBeUndefined()
+    expect(screen.getByLabelText('Add The Fall of Northwatch')).toBeTruthy()
+  })
 })

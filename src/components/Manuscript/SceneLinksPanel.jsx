@@ -44,8 +44,12 @@ export default function SceneLinksPanel({ scene, onUpdateScene, characters = [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [enabled, scene?.id, settledContent, scene?.title, scene?.synopsis, scene?.notes, scene?.characterIds, scene?.locationIds, scene?.timelineEventIds, scene?.dismissedLinks, scene?.pov, scene?.locationTag, scene?.povCharacterId, characters, locations, timeline],
   )
-  const [yearDraft, setYearDraft] = useState(links.storyYear === null ? '' : String(links.storyYear))
+  const shownYear = links.storyYear === null ? '' : String(links.storyYear)
+  const [yearState, setYearState] = useState({ from: shownYear, text: shownYear, dirty: false })
   const [yearError, setYearError] = useState('')
+  // Follow the saved year (undo, another tab, a restore) unless the writer is mid-edit in the box.
+  if (yearState.from !== shownYear && !yearState.dirty) setYearState({ from: shownYear, text: shownYear, dirty: false })
+  const yearDraft = yearState.text
   if (!enabled || !scene) return null
 
   const apply = patch => { if (Object.keys(patch).length) onUpdateScene(scene.id, patch) }
@@ -55,14 +59,17 @@ export default function SceneLinksPanel({ scene, onUpdateScene, characters = [],
     const merged = {}
     const take = patch => { Object.assign(merged, patch); draft = { ...draft, ...patch } }
     if (suggestions.pov) take(setPovPatch(draft, suggestions.pov.id))
-    ;[...suggestions.characters, ...suggestions.locations, ...suggestions.events].forEach(item => take(addLinkPatch(draft, item.type, item.id)))
+    // Events are left out: linking one sets the scene's story year, so each is added on purpose.
+    ;[...suggestions.characters, ...suggestions.locations].forEach(item => take(addLinkPatch(draft, item.type, item.id)))
     apply(merged)
   }
   const commitYear = () => {
+    if (!yearState.dirty) return // nothing typed: never write a stale box value over the saved year
     const parsed = parseStoryYearInput(yearDraft)
     if (!parsed.ok) { setYearError('Use a year such as 40, Year 40 or 300 BC.'); return }
     setYearError('')
-    setYearDraft(parsed.value === null ? '' : String(parsed.value))
+    const text = parsed.value === null ? '' : String(parsed.value)
+    setYearState({ from: text, text, dirty: false })
     if (parsed.value !== links.storyYear) apply({ storyYear: parsed.value })
   }
 
@@ -145,7 +152,7 @@ export default function SceneLinksPanel({ scene, onUpdateScene, characters = [],
             inputMode="text"
             placeholder={derivedYear !== null ? `From linked events: ${formatTimelineDate({ startYear: derivedYear })}` : 'e.g. 40 or 300 BC'}
             aria-invalid={yearError ? 'true' : undefined}
-            onChange={event => { setYearDraft(event.target.value); setYearError('') }}
+            onChange={event => { setYearState(state => ({ ...state, text: event.target.value, dirty: true })); setYearError('') }}
             onBlur={commitYear}
             onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur() }}
           />
