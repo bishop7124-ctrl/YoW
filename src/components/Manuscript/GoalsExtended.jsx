@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useFeatureFlag } from '../../utils/useFeatureFlag'
 import { buildGoalProgress, sprintWords, formatClock, isDateKey } from '../../utils/goalProgress'
 import { localDateKey } from '../../utils/writingStreak'
@@ -57,15 +57,25 @@ function GoalRow({ label, progress, onSetGoal, unit = 'words' }) {
   )
 }
 
-function Sprint({ totalWords }) {
-  const [sprint, setSprint] = useState(null) // { endsAt, startedAt, startWords, minutes }
+// The sprint lives outside the component so it survives switching Inspector tabs or closing the panel; the
+// clock is based on the real time, so it keeps running correctly while the panel is away. A sprint belongs to
+// one project, so it never shows (or counts words) in another.
+let sprintState = { sprint: null, result: null, announce: '' }
+const sprintListeners = new Set()
+const setSprintState = patch => { sprintState = { ...sprintState, ...patch }; sprintListeners.forEach(listener => listener()) }
+const subscribeSprint = listener => { sprintListeners.add(listener); return () => sprintListeners.delete(listener) }
+const readSprint = () => sprintState
+
+function Sprint({ totalWords, projectId }) {
+  const { sprint: stored, result: storedResult, announce } = useSyncExternalStore(subscribeSprint, readSprint, readSprint)
+  const sprint = stored && stored.projectId === projectId ? stored : null
+  const result = storedResult && storedResult.projectId === projectId ? storedResult : null
   const [now, setNow] = useState(0)
-  const [result, setResult] = useState(null)
-  const [announce, setAnnounce] = useState('')
   const [custom, setCustom] = useState('')
   const wordsRef = useRef(totalWords)
   useEffect(() => { wordsRef.current = totalWords }, [totalWords])
 
+  // Ticks while this panel is showing a sprint; also settles one that ended while the panel was away.
   useEffect(() => {
     if (!sprint) return undefined
     const tick = () => {
@@ -73,31 +83,34 @@ function Sprint({ totalWords }) {
       setNow(time)
       if (time >= sprint.endsAt) {
         const words = sprintWords(sprint.startWords, wordsRef.current)
-        setResult({ words, minutes: sprint.minutes })
-        setAnnounce(`Sprint finished: ${words.toLocaleString()} words in ${sprint.minutes} minutes.`)
-        setSprint(null)
+        setSprintState({
+          sprint: null,
+          result: { words, minutes: sprint.minutes, projectId },
+          announce: `Sprint finished: ${words.toLocaleString()} words in ${sprint.minutes} minutes.`,
+        })
       }
     }
+    tick()
     const timer = setInterval(tick, 1000)
     return () => clearInterval(timer)
-  }, [sprint])
+  }, [sprint, projectId])
 
   const start = minutes => {
     const m = Math.round(Number(minutes))
     if (!Number.isFinite(m) || m < 1 || m > 240) return
     const time = nowMs()
-    setResult(null)
     setNow(time)
-    setSprint({ startedAt: time, endsAt: time + m * 60_000, startWords: wordsRef.current, minutes: m })
-    setAnnounce(`Sprint started: ${m} minutes.`)
+    setSprintState({
+      sprint: { startedAt: time, endsAt: time + m * 60_000, startWords: wordsRef.current, minutes: m, projectId },
+      result: null,
+      announce: `Sprint started: ${m} minutes.`,
+    })
   }
   const stop = () => {
     if (!sprint) return
     const words = sprintWords(sprint.startWords, wordsRef.current)
     const minutes = Math.max(1, Math.round((nowMs() - sprint.startedAt) / 60_000))
-    setResult({ words, minutes, early: true })
-    setAnnounce(`Sprint stopped: ${words.toLocaleString()} words.`)
-    setSprint(null)
+    setSprintState({ sprint: null, result: { words, minutes, early: true, projectId }, announce: `Sprint stopped: ${words.toLocaleString()} words.` })
   }
 
   return (
@@ -105,7 +118,7 @@ function Sprint({ totalWords }) {
       <div className="ms-goal-row-top"><b>Writing sprint</b></div>
       {sprint ? (
         <>
-          <div className="ms-sprint-clock" aria-hidden="true">{formatClock(sprint.endsAt - now)}</div>
+          <div className="ms-sprint-clock" aria-hidden="true">{formatClock(sprint.endsAt - (now || sprint.startedAt))}</div>
           <p className="ms-goal-note">{sprintWords(sprint.startWords, totalWords).toLocaleString()} words this sprint</p>
           <button type="button" className="ms-goal-edit" onClick={stop}>Stop sprint</button>
         </>
@@ -135,7 +148,10 @@ function Sprint({ totalWords }) {
   )
 }
 
-export default function GoalsExtended({ goals = {}, onUpdateGoals, dailyWords = {}, totalWords = 0 }) {
+// Test hook: lets a test start from a clean slate.
+export const resetSprintForTests = () => setSprintState({ sprint: null, result: null, announce: '' })
+
+export default function GoalsExtended({ goals = {}, onUpdateGoals, dailyWords = {}, totalWords = 0, projectId = '' }) {
   const enabled = useFeatureFlag('goals_extended')
   const today = localDateKey()
   const progress = useMemo(
@@ -178,7 +194,7 @@ export default function GoalsExtended({ goals = {}, onUpdateGoals, dailyWords = 
         )}
       </div>
 
-      <Sprint totalWords={totalWords} />
+      <Sprint totalWords={totalWords} projectId={projectId} />
     </div>
   )
 }

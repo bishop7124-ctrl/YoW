@@ -4,9 +4,9 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 const flag = { on: true }
 vi.mock('../../utils/useFeatureFlag', () => ({ useFeatureFlag: () => flag.on }))
-import GoalsExtended from './GoalsExtended'
+import GoalsExtended, { resetSprintForTests } from './GoalsExtended'
 
-beforeEach(() => { flag.on = true })
+beforeEach(() => { flag.on = true; resetSprintForTests() })
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
 const open = (props = {}) => {
@@ -95,5 +95,32 @@ describe('GoalsExtended', () => {
     fireEvent.change(screen.getByLabelText('Custom minutes'), { target: { value: '12' } })
     fireEvent.click(screen.getByText('Start'))
     expect(screen.getByText('Stop sprint')).toBeTruthy()
+  })
+
+  it('keeps a running sprint when the panel is closed and reopened, and settles one that ended meanwhile', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-11T10:00:00'))
+    const first = render(<GoalsExtended goals={{}} dailyWords={{}} totalWords={100} projectId="p1" onUpdateGoals={vi.fn()} />)
+    fireEvent.click(screen.getByText('10 min'))
+    first.unmount() // e.g. the writer switches Inspector tab
+    vi.setSystemTime(new Date('2026-11-11T10:03:00'))
+    const second = render(<GoalsExtended goals={{}} dailyWords={{}} totalWords={160} projectId="p1" onUpdateGoals={vi.fn()} />)
+    expect(screen.getByText('7:00')).toBeTruthy()
+    expect(screen.getByText('60 words this sprint')).toBeTruthy()
+    second.unmount()
+    vi.setSystemTime(new Date('2026-11-11T10:20:00'))
+    render(<GoalsExtended goals={{}} dailyWords={{}} totalWords={300} projectId="p1" onUpdateGoals={vi.fn()} />)
+    expect(screen.getByText(/Last sprint:/).textContent).toContain('200 words')
+  })
+
+  it('does not show or count a sprint from another project', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-11T10:00:00'))
+    const a = render(<GoalsExtended goals={{}} dailyWords={{}} totalWords={100} projectId="p1" onUpdateGoals={vi.fn()} />)
+    fireEvent.click(screen.getByText('10 min'))
+    a.unmount()
+    render(<GoalsExtended goals={{}} dailyWords={{}} totalWords={5000} projectId="p2" onUpdateGoals={vi.fn()} />)
+    expect(screen.queryByText('Stop sprint')).toBeNull()
+    expect(screen.getByText('10 min')).toBeTruthy()
   })
 })

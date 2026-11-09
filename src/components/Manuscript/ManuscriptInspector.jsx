@@ -370,7 +370,7 @@ function ProgressTab({ scenes, chapters, writingGoals, onUpdateGoals }) {
         </div>
       </div>
 
-      <GoalsExtended goals={goals} onUpdateGoals={onUpdateGoals} dailyWords={dailyWords} totalWords={totalWords} />
+      <GoalsExtended goals={goals} onUpdateGoals={onUpdateGoals} dailyWords={dailyWords} totalWords={totalWords} projectId={scenes[0]?.novelId || chapters[0]?.novelId || ''} />
 
       <div className="ms-insp-group">
         <div className="ms-insp-label">Targets</div>

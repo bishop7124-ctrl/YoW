@@ -1,5 +1,17 @@
 # YOW Deferred QA Plan
 
+## 2026-11-11 Extended goals, deadline projection and sprint timer (owner, A5)
+
+Behind the `goals_extended` flag (off for everyone); no migration (new fields on the project's writing goals). The "what works without AI" notes are not flagged and are live once deployed. Checked in a browser on the offline sample project with the flag forced on; not on the live site.
+
+1. Turn the flag on for yourself: `insert into public.feature_flags (key, enabled, allow_user_ids) values ('goals_extended', true, array['d3795e69-dcf4-4cd4-86d0-d48149ec3ca8']::uuid[]);` then reload. (The Inspector is only shown on desktop and tablet widths.)
+2. In the manuscript open the Inspector > Progress tab: a "Goals (Beta)" section appears above Targets. Set a weekly goal and a monthly goal; each shows words so far this week/month (weeks run Monday to Sunday) and roughly how many words a day finish it. Setting 0 or clearing the box turns a goal off.
+3. Write a few hundred words and check the weekly and monthly totals go up and agree with the "today" figure above.
+4. Deadline: pick a date and make sure the project has a word target (Targets > Manuscript). You should see days left, words to go, the words a day needed, and either "On track", "Behind" or "write a little to see a projection". Clear the date with Clear.
+5. Sprint: start a 10-minute sprint, switch to another Inspector tab and back: the clock should still be running. Type some words; the sprint word count should rise. Stop it, or let a short custom sprint (1 minute) finish: "Last sprint: N words in M minutes" appears.
+6. Reload the page: goals and deadline persist (a sprint does not survive a reload, by design).
+7. Account settings > AI Integration and the AI Tools page (as a Free user) should now say AI is optional and that the rest of YOW works without it. Tell Claude if any wording over-promises.
+
 ## 2026-11-10 Scene story links and new Story Check rules (owner, A4)
 
 Behind the `scene_links` flag (off for everyone). No migration: links are extra fields on each scene, so they sync and export with the scene. Rules R9 and R10 also need `story_check` on. Checked in a browser on the offline sample project with both flags forced on; not on the live site or real data.
