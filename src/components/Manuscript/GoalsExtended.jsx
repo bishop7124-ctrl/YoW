@@ -35,7 +35,7 @@ function GoalRow({ label, progress, onSetGoal, unit = 'words' }) {
             onKeyDown={event => { if (event.key === 'Enter') commit(); if (event.key === 'Escape') setEditing(false) }}
           />
         ) : (
-          <button type="button" className="ms-goal-edit" onClick={() => { setDraft(progress.goal > 0 ? String(progress.goal) : ''); setEditing(true) }}>
+          <button type="button" className="ms-goal-edit" aria-label={`${progress.goal > 0 ? 'Edit' : 'Set'} ${label.toLowerCase()} goal`} onClick={() => { setDraft(progress.goal > 0 ? String(progress.goal) : ''); setEditing(true) }}>
             {progress.goal > 0 ? 'Edit' : 'Set goal'}
           </button>
         )}
@@ -51,7 +51,7 @@ function GoalRow({ label, progress, onSetGoal, unit = 'words' }) {
           </p>
         </>
       ) : (
-        <p className="ms-goal-note">No {label.toLowerCase()} goal set.</p>
+        <p className="ms-goal-note">No goal set for {label.toLowerCase()}.</p>
       )}
     </div>
   )

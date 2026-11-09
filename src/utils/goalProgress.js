@@ -80,14 +80,17 @@ export function buildGoalProgress({ dailyWords = {}, goals = {}, totalWords = 0,
       deadline = { ...base, status: 'passed', message: `The deadline passed ${-daysLeft} ${-daysLeft === 1 ? 'day' : 'days'} ago with ${remainingWords.toLocaleString()} words to go.` }
     } else {
       const requiredPerDay = Math.ceil(remainingWords / (daysLeft + 1)) // today counts as a writing day
-      const projected = pace > 0 ? shiftDateKey(today, Math.ceil(remainingWords / pace)) : null
+      // A pace of a few words a day would project decades away; past ten years we say so instead of showing a date.
+      const daysNeeded = pace > 0 ? Math.ceil(remainingWords / pace) : null
+      const projected = daysNeeded !== null && daysNeeded <= 3650 ? shiftDateKey(today, daysNeeded) : null
+      const finishText = projected ? `around ${projected}` : 'in more than ten years'
       let status = 'no-pace'
       let message = `${remainingWords.toLocaleString()} words to go, about ${requiredPerDay.toLocaleString()} a day. Write a little to see a projection.`
       if (pace > 0) {
         status = pace >= requiredPerDay ? 'on-track' : 'behind'
         message = status === 'on-track'
-          ? `On track: at your recent pace of ${Math.round(pace).toLocaleString()} words a day you would finish around ${projected}.`
-          : `Behind: you need about ${requiredPerDay.toLocaleString()} words a day, and your recent pace is ${Math.round(pace).toLocaleString()}. At that pace you would finish around ${projected}.`
+          ? `On track: at your recent pace of ${Math.round(pace).toLocaleString()} words a day you would finish ${finishText}.`
+          : `Behind: you need about ${requiredPerDay.toLocaleString()} words a day, and your recent pace is ${Math.round(pace).toLocaleString()}. At that pace you would finish ${finishText}.`
       }
       deadline = { ...base, requiredPerDay, projectedFinish: projected, status, message }
     }

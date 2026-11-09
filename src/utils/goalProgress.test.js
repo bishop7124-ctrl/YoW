@@ -69,6 +69,12 @@ describe('deadline projection', () => {
     expect(p.deadline.requiredPerDay).toBe(Math.ceil(2000 / 11))
     expect(p.deadline.message).toMatch(/Behind/)
   })
+  it('does not print a date decades away for a tiny pace', () => {
+    const p = buildGoalProgress({ dailyWords: { '2026-11-11': 14 }, goals: { manuscript: 90000, deadline: '2026-12-31' }, totalWords: 0, today: TODAY })
+    expect(p.deadline.status).toBe('behind')
+    expect(p.deadline.projectedFinish).toBeNull()
+    expect(p.deadline.message).toMatch(/more than ten years/)
+  })
   it('says there is no projection without recent writing, instead of guessing', () => {
     const p = buildGoalProgress({ dailyWords: pace, goals: { manuscript: 10000, deadline: '2026-12-31' }, totalWords: 100, today: TODAY })
     expect(p.deadline.status).toBe('no-pace')

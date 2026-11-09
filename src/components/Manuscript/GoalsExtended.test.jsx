@@ -24,8 +24,8 @@ describe('GoalsExtended', () => {
 
   it('shows "set goal" prompts when nothing is set, and saves a weekly goal', () => {
     const { update } = open({ goals: { daily: 500 } })
-    expect(screen.getByText('No this week goal set.')).toBeTruthy()
-    fireEvent.click(screen.getAllByText('Set goal')[0])
+    expect(screen.getByText('No goal set for this week.')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Set this week goal'))
     const input = screen.getByLabelText('This week goal in words')
     fireEvent.change(input, { target: { value: '3500' } })
     fireEvent.keyDown(input, { key: 'Enter' })
@@ -34,7 +34,7 @@ describe('GoalsExtended', () => {
 
   it('clearing a goal with an empty or zero value turns it off', () => {
     const { update } = open({ goals: { monthly: 8000 } })
-    fireEvent.click(screen.getByText('Edit'))
+    fireEvent.click(screen.getByLabelText('Edit this month goal'))
     const input = screen.getByLabelText('This month goal in words')
     fireEvent.change(input, { target: { value: '0' } })
     fireEvent.keyDown(input, { key: 'Enter' })
