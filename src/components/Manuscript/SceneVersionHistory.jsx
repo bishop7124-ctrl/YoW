@@ -60,7 +60,7 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
   }, [sceneId, cloudActive])
 
   // A failed load (for example the account finished signing in mid-request) is retried a few times, then reported.
-  const [cloudAttempt, setCloudAttempt] = useState({ sceneId: null, failed: false })
+  const [cloudAttempt, setCloudAttempt] = useState({ sceneId: null, failed: false, tries: 0, reason: '' })
   const epoch = useCloudHistoryEpoch()
   useEffect(() => {
     let cancelled = false
@@ -72,11 +72,12 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
         if (loaded.ok) {
           setCloudVersions(loaded.versions)
           setCloudLoadedFor(sceneId)
-          setCloudAttempt({ sceneId, failed: false })
+          setCloudAttempt({ sceneId, failed: false, tries: 0, reason: '' })
         } else if (tries < 3) {
+          setCloudAttempt({ sceneId, failed: false, tries: tries + 1, reason: lastCloudHistoryError() })
           timer = setTimeout(() => attempt(tries + 1), 1500 * (tries + 1))
         } else {
-          setCloudAttempt({ sceneId, failed: true })
+          setCloudAttempt({ sceneId, failed: true, tries: 4, reason: lastCloudHistoryError() })
         }
       })
     }
@@ -227,7 +228,7 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
                   ? `Account: ${cloudVersions.length} saved for this scene.`
                   : cloudAttempt.failed && cloudAttempt.sceneId === scene?.id
                     ? `Account: could not load${lastCloudHistoryError() ? ` (${lastCloudHistoryError()})` : ''}.`
-                    : 'Account: loading…'}
+                    : `Account: loading…${cloudAttempt.tries ? ` (try ${cloudAttempt.tries + 1} of 4, last problem: ${cloudAttempt.reason || 'none'})` : ''}`}
               </div>
             )}
             {cloudActive && cloudPaused && (

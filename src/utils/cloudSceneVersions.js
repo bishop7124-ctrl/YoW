@@ -76,11 +76,20 @@ export function useCloudHistoryEpoch() {
 }
 export const lastCloudHistoryError = () => lastErrorCode
 
-async function call(run, { backoff = true } = {}) {
+const CALL_TIMEOUT_MS = 12000
+const TIMED_OUT = Symbol('timed out')
+
+async function call(run, { backoff = true, timeoutMs = CALL_TIMEOUT_MS } = {}) {
   if (!usable()) { lastErrorCode = isCloudSceneHistoryActive() ? 'paused' : 'not-signed-in'; return { ok: false, data: null } }
   const userAtStart = state.userId
   try {
-    const { data, error } = await run()
+    let timer
+    const raced = await Promise.race([
+      run(),
+      new Promise(resolve => { timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs) }),
+    ]).finally(() => clearTimeout(timer))
+    if (raced === TIMED_OUT) { lastErrorCode = 'timeout'; return { ok: false, data: null } }
+    const { data, error } = raced
     if (userAtStart !== state.userId) { lastErrorCode = 'account-changed'; return { ok: false, data: null } }
     if (error) throw error
     lastErrorCode = ''
