@@ -62,12 +62,10 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
   // A failed load (for example the account finished signing in mid-request) is retried a few times, then reported.
   const [cloudAttempt, setCloudAttempt] = useState({ sceneId: null, failed: false, tries: 0, reason: '' })
   const epoch = useCloudHistoryEpoch()
-  const [loadRuns, setLoadRuns] = useState(0)
   useEffect(() => {
     let cancelled = false
     let timer = null
     if (!sceneId || !cloudActive) return undefined
-    setLoadRuns(n => n + 1) // eslint-disable-line react-hooks/set-state-in-effect
     const attempt = tries => {
       loadCloudSceneVersions(sceneId).then(loaded => {
         if (cancelled) return
@@ -230,9 +228,9 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
                 ? 'Recent versions are kept on this device and in your account: the latest 20, plus one a day for 30 days.'
                 : 'Saved on this device only — not synced to your account or other devices.'}
             </div>
-            {cloudActive && (
+            {cloudActive && scene?.id && (
               <div className="ms-vh-subtitle ms-vh-status" data-testid="vh-cloud-status">
-                {`[build ${import.meta.env.VITE_BUILD_SHA || 'dev'}, started ${loadRuns}x, scene ${sceneId ? 'ok' : 'MISSING'}] `}{cloudLoadedFor === scene?.id
+                {cloudLoadedFor === scene?.id
                   ? `Account: ${cloudVersions.length} saved for this scene.`
                   : cloudAttempt.failed && cloudAttempt.sceneId === scene?.id
                     ? `Account: could not load${lastCloudHistoryError() ? ` (${lastCloudHistoryError()})` : ''}.`
@@ -266,7 +264,12 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
         </div>
 
         <div className="ms-vh-body">
-          {versions.length === 0 ? (
+          {!scene?.id ? (
+            <div className="ms-vh-empty">
+              <p>No scene selected.</p>
+              <p className="ms-vh-empty-hint">Click into a scene in the manuscript, then open Version history again to see its saved versions.</p>
+            </div>
+          ) : versions.length === 0 ? (
             <div className="ms-vh-empty">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3, marginBottom: 8 }}>
                 <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />

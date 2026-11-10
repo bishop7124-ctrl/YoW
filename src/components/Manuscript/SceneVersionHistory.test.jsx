@@ -51,6 +51,13 @@ afterEach(cleanup)
 const open = (props = {}) => render(<SceneVersionHistory embedded scene={scene} onRestore={vi.fn()} onClose={vi.fn()} onToast={vi.fn()} {...props} />)
 
 describe('SceneVersionHistory with cloud history', () => {
+  it('with no scene selected it says so instead of loading forever', async () => {
+    cloud.active = true
+    open({ scene: null })
+    expect(await screen.findByText('No scene selected.')).toBeTruthy()
+    expect(screen.queryByText(/Account:/)).toBeNull()
+  })
+
   it('says "device only" when cloud history is not active', async () => {
     cloud.active = false
     open()
