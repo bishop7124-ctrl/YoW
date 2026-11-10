@@ -1,3 +1,4 @@
+import { resolveHistorySceneId } from '../../utils/historyScene'
 import { useState, useMemo, useEffect, useRef, useCallback, useSyncExternalStore } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
 import { BREAKPOINT_MS_OVERLAY, useMediaQuery } from '../../utils/useMediaQuery'
@@ -371,7 +372,10 @@ export default function Manuscript({ store, userId, membership = null }) {
   const [readerDraft, setReaderDraft] = useState({ projectId: null, draftId: null })
   const [finalizedReaderView, setFinalizedReaderView] = useState('scroll')
   const [finalizedPageIndex, setFinalizedPageIndex] = useState(0)
-  const [versionHistorySceneId, setVersionHistorySceneId] = useState(null)
+  // The history panel follows the scene you are working in: it shows the scene it was opened for until you click
+  // into a different one (activeSceneId moves off `anchor`), then it switches to that scene.
+  const [versionHistoryPick, setVersionHistoryPick] = useState({ sceneId: null, anchor: null })
+  const versionHistorySceneId = resolveHistorySceneId(activeSceneId, versionHistoryPick, scenes)
   const [pacingOpen, setPacingOpen] = useState(false)
   const [catalogueOpen, setCatalogueOpen] = useState(false)
   const [aiSelectionContext, setAiSelectionContext] = useState({ sceneId: null, text: '' })
@@ -1209,7 +1213,7 @@ export default function Manuscript({ store, userId, membership = null }) {
       case 'template': setTemplateModalOpen(true); break
       case 'import': setImportModalOpen(true); break
       case 'history':
-        setVersionHistorySceneId(activeSceneId)
+        setVersionHistoryPick({ sceneId: activeSceneId, anchor: activeSceneId })
         handleToggleSurface('history')
         break
       case 'finalise': handleToggleSurface('finalise'); break
@@ -1580,7 +1584,7 @@ export default function Manuscript({ store, userId, membership = null }) {
                         onPersistDraft={mode === 'edit' ? () => {} : handlePersistDraft}
                         onLiveContentChange={handleLiveContentChange}
                         onSelectionContextChange={text => setAiSelectionContext({ sceneId: scene.id, text })}
-                        onOpenVersionHistory={id => { setVersionHistorySceneId(id); handleToggleSurface('history') }}
+                        onOpenVersionHistory={id => { setActiveSceneId(id); setVersionHistoryPick({ sceneId: id, anchor: id }); handleToggleSurface('history') }}
                         onOpenSceneDetails={handleOpenSceneDetails}
                         onAskAI={handleAskAI}
                         mode={mode === 'write' ? 'write' : 'edit'}

@@ -131,6 +131,7 @@ export default function ManuscriptSurface({
         )}
         {activeSurface === 'history' && (
           <SceneVersionHistory
+            key={historyScene?.id || 'none'}
             embedded
             scene={historyScene}
             onRestore={onRestoreVersion}
