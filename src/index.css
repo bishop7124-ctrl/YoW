@@ -24937,3 +24937,15 @@ body {
 .ms-sprint-custom input { padding: 6px 10px; border-radius: var(--r-md); border: 1px solid var(--border); background: var(--bg-main); color: var(--text-main); font: 13px var(--font); max-width: 150px; }
 .ms-sprint-clock { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-main); }
 .ms-visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* "A new version is available" banner */
+.yow-update-banner {
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 9500;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: center;
+  max-width: min(560px, calc(100vw - 32px)); padding: 10px 14px;
+  background: var(--bg-nav); color: var(--text-main);
+  border: 1px solid color-mix(in srgb, var(--border) 60%, var(--accent) 40%); border-radius: var(--r-md);
+  box-shadow: 0 12px 40px rgba(0,0,0,.35); font-size: 13px; line-height: 1.4;
+}
+.yow-update-banner-btn { min-height: 32px; padding: 4px 14px; border-radius: var(--r-sm); border: 1px solid var(--accent); background: var(--accent); color: var(--button-primary-text); font: inherit; font-weight: 700; cursor: pointer; }
+.yow-update-banner-later { min-height: 32px; padding: 4px 8px; border: 0; background: none; color: var(--text-muted); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }

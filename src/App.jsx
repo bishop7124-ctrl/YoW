@@ -61,6 +61,7 @@ import { createAccountLoadGuard } from './utils/accountLoadGuard'
 import { consumeUnsyncedSignOut } from './store/syncFlushRegistry'
 import { formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
+import UpdateBanner from './components/UpdateBanner'
 import { trackEvent } from './utils/analytics'
 import { loadAiSettings } from './utils/aiSettings'
 import { hydrateSyncedAiSettings } from './utils/syncedAiSettings'
@@ -1820,6 +1821,7 @@ export default function App() {
     <ErrorBoundary>
       <AuthProvider>
         <AppInner />
+        <UpdateBanner />
         <Analytics />
       </AuthProvider>
     </ErrorBoundary>

@@ -72,6 +72,26 @@ function renderSeoHtml(source, page) {
   return html
 }
 
+// Publishes the build's commit id as /version.json so a tab that was opened before a deploy can tell it is out of
+// date (see src/utils/versionCheck.js). Skipped when there is no commit id (local builds) and for the desktop app.
+function writeBuildVersion() {
+  let mode
+  let outDir
+  return {
+    name: 'write-build-version',
+    apply: 'build',
+    configResolved(config) {
+      mode = config.mode
+      outDir = path.resolve(config.root, config.build.outDir)
+    },
+    closeBundle() {
+      if (mode === 'desktop' || !BUILD_SHA) return
+      fs.mkdirSync(outDir, { recursive: true })
+      fs.writeFileSync(path.join(outDir, 'version.json'), JSON.stringify({ build: BUILD_SHA }))
+    },
+  }
+}
+
 function generateSpaSeoPages() {
   let mode
   let outDir
@@ -197,7 +217,7 @@ export default defineConfig(({ mode }) => ({
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(APP_VERSION),
     'import.meta.env.VITE_BUILD_SHA': JSON.stringify(BUILD_SHA),
   },
-  plugins: [react(), staticHtmlMiddleware(), stripAnalyticsForDesktop(), generateSpaSeoPages(), localApiMiddleware(mode)],
+  plugins: [react(), staticHtmlMiddleware(), stripAnalyticsForDesktop(), writeBuildVersion(), generateSpaSeoPages(), localApiMiddleware(mode)],
   build: {
     chunkSizeWarningLimit: 1000,
   },
