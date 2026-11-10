@@ -62,12 +62,12 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
   // A failed load (for example the account finished signing in mid-request) is retried a few times, then reported.
   const [cloudAttempt, setCloudAttempt] = useState({ sceneId: null, failed: false, tries: 0, reason: '' })
   const epoch = useCloudHistoryEpoch()
-  const loadRuns = useRef(0)
+  const [loadRuns, setLoadRuns] = useState(0)
   useEffect(() => {
     let cancelled = false
     let timer = null
     if (!sceneId || !cloudActive) return undefined
-    loadRuns.current += 1
+    setLoadRuns(n => n + 1) // eslint-disable-line react-hooks/set-state-in-effect
     const attempt = tries => {
       loadCloudSceneVersions(sceneId).then(loaded => {
         if (cancelled) return
@@ -86,8 +86,9 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
     attempt(0)
     // Safety net independent of the request: if nothing at all has come back, say so instead of "loading" forever.
     const watchdog = setTimeout(() => {
-      if (!cancelled) setCloudAttempt(prev => (prev.sceneId === sceneId && !prev.failed && prev.tries === 0
-        ? { sceneId, failed: true, tries: 4, reason: 'no-response' } : prev))
+      if (!cancelled) setCloudAttempt(prev => (prev.sceneId === sceneId && prev.failed ? prev
+        : prev.sceneId === sceneId && prev.tries > 0 ? prev
+          : { sceneId, failed: true, tries: 4, reason: 'no-response' }))
     }, 30000)
     return () => { cancelled = true; clearTimeout(timer); clearTimeout(watchdog) }
   }, [sceneId, cloudActive, cloudPaused, epoch])
@@ -231,7 +232,7 @@ export default function SceneVersionHistory({ scene, onRestore, onClose, onToast
             </div>
             {cloudActive && (
               <div className="ms-vh-subtitle ms-vh-status" data-testid="vh-cloud-status">
-                {`[build ${import.meta.env.VITE_BUILD_SHA || 'dev'}, started ${loadRuns.current}x] `}{cloudLoadedFor === scene?.id
+                {`[build ${import.meta.env.VITE_BUILD_SHA || 'dev'}, started ${loadRuns}x, scene ${sceneId ? 'ok' : 'MISSING'}] `}{cloudLoadedFor === scene?.id
                   ? `Account: ${cloudVersions.length} saved for this scene.`
                   : cloudAttempt.failed && cloudAttempt.sceneId === scene?.id
                     ? `Account: could not load${lastCloudHistoryError() ? ` (${lastCloudHistoryError()})` : ''}.`
