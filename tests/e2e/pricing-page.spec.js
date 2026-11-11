@@ -50,7 +50,7 @@ test('paid buttons are greyed out and open no interest form while beta is closed
   await gotoPricing(page)
 
   const monthlyCard = page.getByRole('article', { name: 'Monthly plan — £10' })
-  const button = monthlyCard.getByRole('button', { name: 'Paid access coming 2nd November' })
+  const button = monthlyCard.getByRole('button', { name: 'Unavailable' })
   await expect(button).toBeVisible()
   await expect(button).toBeDisabled()
   await button.click({ force: true })
@@ -77,7 +77,7 @@ for (const viewport of [
     await expect(table).toBeVisible()
 
     const lifetimeCard = page.getByRole('article', { name: /Lifetime plan — £75/ })
-    await expect(lifetimeCard.getByRole('button', { name: 'Paid access coming 2nd November' })).toBeDisabled()
+    await expect(lifetimeCard.getByRole('button', { name: 'Unavailable' })).toBeDisabled()
   })
 }
 
@@ -85,8 +85,7 @@ test('paid buttons are greyed out while the checkout launch switch is closed', a
   await page.route('**/api/get-founder-slots', route => route.fulfill({ json: { total: 100, taken: 63, held: 0, remaining: 37, checkoutOpen: false } }))
   await gotoPricing(page)
 
-  await expect(page.getByText('Beta is closing - live launch from 2 November 2026.')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Paid access coming 2nd November' })).toHaveCount(2)
+  await expect(page.getByRole('button', { name: 'Unavailable' })).toHaveCount(2)
   await expect(page.getByRole('button', { name: /Choose (Monthly|Lifetime)/ })).toHaveCount(0)
 })
 
@@ -98,8 +97,7 @@ test('paid buttons offer real checkout once the launch switch is open, and never
   await page.route('**/api/get-founder-slots', route => route.fulfill({ json: { total: 100, taken: 63, held: 0, remaining: 37, checkoutOpen: true } }))
   await gotoPricing(page)
 
-  await expect(page.getByText('Beta is closing - live launch from 2 November 2026.')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Paid access coming 2nd November' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Unavailable' })).toHaveCount(0)
   const monthlyCard = page.getByRole('article', { name: 'Monthly plan — £10' })
   await expect(monthlyCard.getByRole('button', { name: 'Choose Monthly' })).toBeVisible()
   await expect(page.getByRole('article', { name: /Lifetime plan — £50/ }).getByRole('button', { name: 'Choose Lifetime' })).toBeVisible()
@@ -115,5 +113,5 @@ test('paid buttons offer real checkout once the launch switch is open, and never
 test('checkout stays closed when the availability request fails', async ({ page }) => {
   await page.route('**/api/get-founder-slots', route => route.abort())
   await gotoPricing(page)
-  await expect(page.getByRole('button', { name: 'Paid access coming 2nd November' })).toHaveCount(2)
+  await expect(page.getByRole('button', { name: 'Unavailable' })).toHaveCount(2)
 })

@@ -193,7 +193,7 @@ export default function PricingPage({ onGetStarted, onSignIn, user }) {
           ) : launchOpen ? (
             checkoutError && <p className="pricing-test-error" role="alert">{checkoutError}</p>
           ) : (
-            <p className="pricing-availability-note">Free is available now. Beta is closing - live launch from 2 November 2026. Paid access opens then; the paid buttons stay greyed out until it does.</p>
+            <p className="pricing-availability-note">Free is available now.</p>
           )}
         </section>
 

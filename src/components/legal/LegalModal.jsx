@@ -156,8 +156,7 @@ const CONTENT = {
     body: (
       <>
         <Section title="Service status">
-          <P><Accent>Beta is closing - live launch from 2 November 2026.</Accent> Beta is closed to new sign-ups; paid access opens on 2 November 2026.</P>
-          <P>Until then, Your Own World is provided as an <Accent>early-access service</Accent>. Features, interface details, pricing, limits, and availability may change as we improve the platform.</P>
+                    <P>Until then, Your Own World is provided as an <Accent>early-access service</Accent>. Features, interface details, pricing, limits, and availability may change as we improve the platform.</P>
         </Section>
         <Section title="Service availability">
           <P>Until launch, some features may be incomplete, experimental, temporarily unavailable, or changed without prior notice. We work to keep the Service stable, but early access is provided without a guarantee of uninterrupted operation.</P>
