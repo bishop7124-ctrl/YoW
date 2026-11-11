@@ -2036,6 +2036,9 @@ export function useStore(userId = null, options = {}) {
     setTimeout(() => {
       importing.current = false
       remoteReady.current = true
+      // A normal account load ends here (App does not call finishRemoteLoad for it), so this is also the moment
+      // the optional plot-thread cloud read may start.
+      if (canSyncCloud && userId && activeUserRef.current === userId) setMainLoadFinishedFor(userId)
       if (canSyncCloud && healedRpgCharacterChanges.length) {
         trackSync(upsertItems('rpg_characters', userId, healedRpgCharacterChanges)).catch(() => {})
       }

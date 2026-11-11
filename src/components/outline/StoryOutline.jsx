@@ -313,7 +313,7 @@ function OutlineProject({ store }) {
           {model.totals.words > 0 && <span className="font-mono font-bold text-[var(--accent)]">{model.totals.words.toLocaleString()} words</span>}
         </div>
       </div>
-      {!disabled && <button type="button" data-tour="outline-add" onClick={addAct} className="btn btn-primary">+ {labels.level1}</button>}
+      {!disabled && !showThreads && !showStructure && <button type="button" data-tour="outline-add" onClick={addAct} className="btn btn-primary">+ {labels.level1}</button>}
     </div>
 
     {threadsEnabled && (

@@ -151,6 +151,15 @@ describe('plot threads and the cloud', () => {
     expect(fetchPlotThreads).toHaveBeenCalledTimes(1)
   })
 
+  it('starts the thread read when a normal account load (importData) finishes, without finishRemoteLoad', async () => {
+    const hook = withCloud()
+    await settle(50)
+    expect(fetchPlotThreads).not.toHaveBeenCalled()
+    act(() => { hook.result.current.importData({ novels: [], characters: [] }) })
+    await settle(700)
+    expect(fetchPlotThreads).toHaveBeenCalledTimes(1)
+  })
+
   it('pushes threads to the plot_threads table once the first read has succeeded', async () => {
     const hook = withCloud()
     act(() => { hook.result.current.finishRemoteLoad(true) })
