@@ -15,6 +15,7 @@ The live plan and finding statuses are in ROADMAP.md, “Full codebase audit —
 **Remaining programme:** AUD-05 lifecycle partial-failure/recovery and reactivation races are the next high-priority workstream; do not enable scheduled deletion based on the client fixes. AUD-10/20 need native checkpoint/restore interruption tests. AUD-15 operational recovery evidence remains governed by the recovery runbook below; reconcile actual deployed revisions, backup/Storage coverage, restore outcome, alerts and rollback. Payment acceptance is recorded only in PAYMENT_ROADMAP.md.
 
 
+
 ## 2026-11-11 Extended goals, deadline projection and sprint timer (owner, A5)
 
 Behind the `goals_extended` flag (off for everyone); no migration (new fields on the project's writing goals). The "what works without AI" notes are not flagged and are live once deployed. Checked in a browser on the offline sample project with the flag forced on; not on the live site.
