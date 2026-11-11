@@ -22,7 +22,7 @@ const BETA_TESTER_PLAN = {
     'Full app access during beta',
     'Unlimited projects',
     'AI tools and advanced features unlocked',
-    '30 days of full web access after launch, then Free unless you upgrade',
+    '30 days of full web access, then Free unless you upgrade',
   ],
   badge: 'Beta',
   highlight: false,

@@ -106,8 +106,8 @@ const CONTENT = {
           <P>Contact support@yourownworld.co.uk for support or privacy requests. We aim to reply within one week.</P>
           <P>Founder status is permanent recognition for the first 100 genuine Lifetime customers. It is separate from the Lifetime licence and Cloud entitlement, and does not promise priority influence over development or future features.</P>
         </Section>
-        <Section title="Beta access at launch">
-          <P>At launch, beta testers enter a 30-day notice period with full web access. Desktop downloads are not included during that period. At its end the account moves to Free unless upgraded. Download project backups before reducing stored projects to Free limits.</P>
+        <Section title="Beta tester access">
+          <P>Beta testers have a 30-day notice period with full web access. Desktop downloads are not included during that period. At its end the account moves to Free unless upgraded. Download project backups before reducing stored projects to Free limits.</P>
         </Section>
         <Section title="Availability">
           <P>We aim for high availability but do not guarantee uninterrupted service. We are not liable for losses arising from downtime, though we take reasonable precautions to prevent data loss and service interruption.</P>
@@ -156,13 +156,13 @@ const CONTENT = {
     body: (
       <>
         <Section title="Service status">
-                    <P>Until then, Your Own World is provided as an <Accent>early-access service</Accent>. Features, interface details, pricing, limits, and availability may change as we improve the platform.</P>
+          <P>Your Own World is live. Features, interface details, pricing, limits, and availability may change as we continue to improve the platform.</P>
         </Section>
         <Section title="Service availability">
-          <P>Until launch, some features may be incomplete, experimental, temporarily unavailable, or changed without prior notice. We work to keep the Service stable, but early access is provided without a guarantee of uninterrupted operation.</P>
+          <P>Some features, particularly those marked Beta, may be incomplete, experimental, temporarily unavailable, or changed without prior notice. We work to keep the Service stable, but we cannot guarantee uninterrupted operation.</P>
         </Section>
         <Section title="Your content">
-          <P>Your creative work remains yours. We take reasonable steps to protect and preserve project data, but you should keep your own backup exports of important writing until launch and afterwards.</P>
+          <P>Your creative work remains yours. We take reasonable steps to protect and preserve project data, but you should keep your own backup exports of important writing.</P>
         </Section>
         <Section title="AI and experimental tools">
           <P>AI-assisted and experimental features may produce inaccurate, incomplete, or unexpected results. You are responsible for reviewing, editing, and deciding how to use any generated or suggested content.</P>

@@ -3231,7 +3231,7 @@ export default function AccountSettings({
                   {membership.isBetaTester && (
                     <div>
                       <span>Beta notice</span>
-                      <strong>{membership.isBetaNoticeActive ? `${membership.betaDaysRemaining} days remaining` : '30 days of full web access after launch'}</strong>
+                      <strong>{membership.isBetaNoticeActive ? `${membership.betaDaysRemaining} days remaining` : '30 days of full web access'}</strong>
                     </div>
                   )}
                 </>
