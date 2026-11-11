@@ -10,6 +10,7 @@ import { getCharacterAge } from '../../utils/characterAge.js'
 import { buildWritingGoalStreak } from '../../utils/writingStreak.js'
 import { CharacterPortrait } from '../shared/CharacterPortrait.jsx'
 import SceneLinksPanel from './SceneLinksPanel.jsx'
+import ScenePlotThreads from './ScenePlotThreads.jsx'
 import GoalsExtended from './GoalsExtended.jsx'
 
 const TABS = [
@@ -94,7 +95,7 @@ function useSceneEntities(content, entityMap) {
   }, [content, entityMap])
 }
 
-function SceneTab({ scene, onUpdateScene, characterNames, locationNames, entityMap, onEntityClick, characters, locations, timeline }) {
+function SceneTab({ scene, onUpdateScene, characterNames, locationNames, entityMap, onEntityClick, characters, locations, timeline, plotThreads }) {
   // Called unconditionally (rules-of-hooks) even when there's no active scene yet —
   // useSceneEntities itself is a no-op on empty content.
   const entities = useSceneEntities(scene?.content, entityMap)
@@ -164,6 +165,7 @@ function SceneTab({ scene, onUpdateScene, characterNames, locationNames, entityM
       </div>
 
       <SceneLinksPanel key={scene.id} scene={scene} onUpdateScene={onUpdateScene} characters={characters} locations={locations} timeline={timeline} />
+      <ScenePlotThreads key={`threads-${scene.id}`} scene={scene} onUpdateScene={onUpdateScene} threads={plotThreads} />
 
       {entities.length > 0 && (
         <div className="ms-insp-group">
@@ -670,7 +672,7 @@ export default function ManuscriptInspector({
   characters, locations, factions, currentYear, loreEntries, worldHistory, timeline, ideaEntries, storySchedule, rpgCharacters, selectedCatalogueEntity, onOpenEntitySection,
   highlightedNoteSeq,
   formatSettings, onFormatChange,
-  scenes, chapters, writingGoals, onUpdateGoals,
+  scenes, chapters, writingGoals, onUpdateGoals, plotThreads = [],
 }) {
   const noteCount = scene?.notes?.length || 0
 
@@ -705,6 +707,7 @@ export default function ManuscriptInspector({
             characters={characters}
             locations={locations}
             timeline={timeline}
+            plotThreads={plotThreads}
           />
         )}
         {activeTab === 'notes' && (

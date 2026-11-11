@@ -9,6 +9,8 @@ import {
 } from '../../utils/outlineDisplay.js'
 import ParentMoveSelect from '../shared/ParentMoveSelect.jsx'
 import OutlineItemEditor from './OutlineItemEditor.jsx'
+import ThreadsPanel from './ThreadsPanel.jsx'
+import { useFeatureFlag } from '../../utils/useFeatureFlag'
 
 const ChevronIcon = ({ open }) => (
   <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>
@@ -221,6 +223,10 @@ function OutlineProject({ store }) {
   const [dragItem, setDragItem] = useState(null)
   const [editing, setEditing] = useState(null)
   const [actionError, setActionError] = useState('')
+  // Threads view (Release B): only offered while the `plot_threads` flag is on for this account.
+  const threadsEnabled = useFeatureFlag('plot_threads')
+  const [view, setView] = useState('outline')
+  const showThreads = threadsEnabled && view === 'threads'
   const labels = getProjectType(activeNovel?.type).structure
   const indicators = getStoryEventIndicators(activeNovel?.type)
   const model = useMemo(() => buildOutlineModel({ acts, chapters, scenes }), [acts, chapters, scenes])
@@ -299,7 +305,14 @@ function OutlineProject({ store }) {
       {!disabled && <button type="button" data-tour="outline-add" onClick={addAct} className="btn btn-primary">+ {labels.level1}</button>}
     </div>
 
-    <div className="outline-workspace">
+    {threadsEnabled && (
+      <div className="outline-viewswitch" role="tablist" aria-label="Outline views">
+        <button type="button" role="tab" aria-selected={!showThreads} className={!showThreads ? 'is-active' : ''} onClick={() => setView('outline')}>Outline</button>
+        <button type="button" role="tab" aria-selected={showThreads} className={showThreads ? 'is-active' : ''} onClick={() => setView('threads')}>Threads</button>
+      </div>
+    )}
+
+    {showThreads ? <div className="outline-workspace"><ThreadsPanel store={store} /></div> : <div className="outline-workspace">
       {actionError && <div role="alert" className="mx-auto mb-3 flex max-w-3xl items-center justify-between gap-3 rounded border border-red-400/40 bg-red-400/10 px-3 py-2 text-sm"><span>{actionError}</span><button type="button" aria-label="Dismiss error" onClick={() => setActionError('')}>×</button></div>}
       {!model.totals.acts && !hasRecovery ? <div className="empty-state mx-auto mt-12 max-w-lg">
         <p className="text-sm text-[var(--text-muted)]">No {labels.level1.toLowerCase()}s yet.</p>
@@ -327,7 +340,7 @@ function OutlineProject({ store }) {
           </section>}
         </main>
       </div>}
-    </div>
+    </div>}
 
     {editing && <OutlineItemEditor type={editing.type} item={editing.item} number={editing.number} store={store} labels={labels} indicators={indicators} onClose={() => setEditing(null)} onSaved={() => setEditing(null)} />}
   </div>

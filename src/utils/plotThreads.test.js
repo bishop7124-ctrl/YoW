@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   normalizeThread, pickThreadFields, projectThreads, nextThreadOrder, getSceneThreadLinks, setThreadLinkPatch,
   removeThreadLinkPatch, scenesWithoutThreadLinks, remapThreadLinks, mergeThreadLists, MAX_LINKS_PER_SCENE, MAX_THREAD_NAME,
+  threadSceneStats, suggestThreadsForScene, dismissThreadSuggestionPatch, threadKindLabel, nextThreadColor, THREAD_COLORS,
 } from './plotThreads'
 
 describe('normalizeThread', () => {
@@ -94,5 +95,45 @@ describe('mergeThreadLists', () => {
   })
   it('tolerates junk', () => {
     expect(mergeThreadLists(null, [null, { id: 'x' }])).toEqual([{ id: 'x' }])
+  })
+})
+
+describe('threadSceneStats', () => {
+  it('counts scenes and roles for one thread', () => {
+    const scenes = [
+      { threadLinks: [{ threadId: 't', role: 'setup' }] }, { threadLinks: [{ threadId: 't', role: 'payoff' }, { threadId: 'x', role: 'setup' }] },
+      { threadLinks: [{ threadId: 'x', role: 'setup' }] }, {},
+    ]
+    expect(threadSceneStats('t', scenes)).toEqual({ count: 2, byRole: { setup: 1, development: 0, payoff: 1, mention: 0 } })
+    expect(threadSceneStats('t', null).count).toBe(0)
+  })
+})
+
+describe('suggestThreadsForScene', () => {
+  const threads = [
+    { id: 'a', status: 'open', characterIds: ['c1'] }, { id: 'b', status: 'dropped', characterIds: ['c1'] },
+    { id: 'c', status: 'open', characterIds: ['c2'] }, { id: 'd', status: 'open', characterIds: [] },
+  ]
+  it('suggests open threads that share a character with the scene', () => {
+    expect(suggestThreadsForScene({ characterIds: ['c1'] }, threads).map(t => t.id)).toEqual(['a'])
+    expect(suggestThreadsForScene({ characterIds: [] }, threads)).toEqual([])
+    expect(suggestThreadsForScene(null, threads)).toEqual([])
+  })
+  it('skips attached and dismissed threads', () => {
+    expect(suggestThreadsForScene({ characterIds: ['c1'], threadLinks: [{ threadId: 'a', role: 'setup' }] }, threads)).toEqual([])
+    expect(suggestThreadsForScene({ characterIds: ['c1'], dismissedLinks: ['thread:a'] }, threads)).toEqual([])
+  })
+  it('records a dismissal once and keeps the other dismissals', () => {
+    expect(dismissThreadSuggestionPatch({ dismissedLinks: ['character:x'] }, 'a')).toEqual({ dismissedLinks: ['character:x', 'thread:a'] })
+    expect(dismissThreadSuggestionPatch({ dismissedLinks: ['thread:a'] }, 'a')).toEqual({})
+  })
+})
+
+describe('labels and colours', () => {
+  it('uses the custom label for custom threads and cycles colours', () => {
+    expect(threadKindLabel({ kind: 'custom', customLabel: 'Heist' })).toBe('Heist')
+    expect(threadKindLabel({ kind: 'romance' })).toBe('Romance')
+    expect(nextThreadColor([])).toBe(THREAD_COLORS[0])
+    expect(nextThreadColor(new Array(THREAD_COLORS.length).fill({}))).toBe(THREAD_COLORS[0])
   })
 })

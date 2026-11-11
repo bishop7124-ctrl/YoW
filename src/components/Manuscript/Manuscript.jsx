@@ -207,6 +207,7 @@ export default function Manuscript({ store, userId, membership = null }) {
     deleteAct, deleteChapter, deleteScene,
     moveAct, moveChapter, moveScene,
     characters, locations, loreEntries = [], worldHistory = [], timeline = [], factions = [], ideaEntries = [], storySchedule = [], rpgCharacters = [], currentYear,
+    plotThreads = [],
     setSelectedCharacterId, setSelectedLocationId, setSelectedLoreEntryId, setSelectedTimelineEventId, setSelectedHistoryEntryId, setSelectedIdeaEntryId,
     selectedSceneId, setSelectedSceneId,
     writingSceneId, setWritingSceneId,
@@ -1632,6 +1633,7 @@ export default function Manuscript({ store, userId, membership = null }) {
             onEntityClick={handleEntityClick}
             characters={characters}
             locations={locations}
+            plotThreads={plotThreads}
             factions={factions}
             currentYear={currentYear}
             loreEntries={loreEntries}
