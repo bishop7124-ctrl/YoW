@@ -1,4 +1,5 @@
 import { resolveHistorySceneId } from '../../utils/historyScene'
+import { buildEntityIndex } from '../../utils/entityResolver'
 import { useState, useMemo, useEffect, useRef, useCallback, useSyncExternalStore } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
 import { BREAKPOINT_MS_OVERLAY, useMediaQuery } from '../../utils/useMediaQuery'
@@ -482,27 +483,12 @@ export default function Manuscript({ store, userId, membership = null }) {
   const characterNames = useMemo(() => characters.map(c => c.name).filter(Boolean), [characters])
   const locationNames = useMemo(() => locations.map(l => l.name).filter(Boolean), [locations])
 
-  const entityMap = useMemo(() => {
-    const map = {}
-    const put = (name, entity) => {
-      if (name?.trim().length >= 2) map[name.trim().toLowerCase()] = entity
-    }
-    ;(characters || []).forEach(c => {
-      const entity = { id: c.id, section: 'characters', sectionLabel: 'Character', name: c.name, preview: c.summary || c.description || c.notes || c.role || '' }
-      put(c.name, entity)
-      ;(c.keywords || []).forEach(kw => put(kw, entity))
-    })
-    ;(locations || []).forEach(l => {
-      put(l.name, { id: l.id, section: 'locations', sectionLabel: 'Location', name: l.name, preview: l.description || l.notes || l.summary || '' })
-    })
-    ;(loreEntries || []).forEach(entry => {
-      put(entry.title, { id: entry.id, section: 'lore', sectionLabel: 'Lore', name: entry.title, preview: entry.content || entry.summary || entry.category || '' })
-    })
-    ;[...(worldHistory || []), ...(timeline || [])].forEach(entry => {
-      put(entry.title, { id: entry.id, section: 'worldhistory', sectionLabel: 'History', name: entry.title, preview: entry.content || entry.summary || entry.dateRange || entry.era || '' })
-    })
-    return map
-  }, [characters, locations, loreEntries, worldHistory, timeline])
+  // Name and alias lookup for highlighting, chips and previews. Built by one shared resolver (Release C, C1) that
+  // keeps the previous behaviour exactly and also understands `aliases` on every record type.
+  const entityMap = useMemo(
+    () => buildEntityIndex({ characters, locations, loreEntries, worldHistory, timeline }).map,
+    [characters, locations, loreEntries, worldHistory, timeline],
+  )
 
   // Autosave state tracking — wraps updateSceneContent with UI feedback. The
   // indicator itself only clears back to "saved" once the store's syncStatus
