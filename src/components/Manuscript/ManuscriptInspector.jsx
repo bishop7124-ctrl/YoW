@@ -11,6 +11,7 @@ import { buildWritingGoalStreak } from '../../utils/writingStreak.js'
 import { CharacterPortrait } from '../shared/CharacterPortrait.jsx'
 import SceneLinksPanel from './SceneLinksPanel.jsx'
 import ScenePlotThreads from './ScenePlotThreads.jsx'
+import SceneTensionPurpose from './SceneTensionPurpose.jsx'
 import GoalsExtended from './GoalsExtended.jsx'
 
 const TABS = [
@@ -166,6 +167,7 @@ function SceneTab({ scene, onUpdateScene, characterNames, locationNames, entityM
 
       <SceneLinksPanel key={scene.id} scene={scene} onUpdateScene={onUpdateScene} characters={characters} locations={locations} timeline={timeline} />
       <ScenePlotThreads key={`threads-${scene.id}`} scene={scene} onUpdateScene={onUpdateScene} threads={plotThreads} />
+      <SceneTensionPurpose key={`tension-${scene.id}`} scene={scene} onUpdateScene={onUpdateScene} />
 
       {entities.length > 0 && (
         <div className="ms-insp-group">

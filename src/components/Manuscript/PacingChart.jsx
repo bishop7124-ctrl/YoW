@@ -1,9 +1,50 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 
 import { countWords } from '../../utils/dailyWords'
+import { useFeatureFlag } from '../../utils/useFeatureFlag'
+import { getSceneTension, averageTension, tensionCoverage, TENSION_LEVELS } from '../../utils/sceneTension'
+
+// A line over the bars showing each scene's (or chapter's average) tension rating, drawn from where the bars
+// actually are so it stays aligned however wide the chart is. Unrated columns are skipped. Display only.
+function TensionOverlay({ chartRef, tensions }) {
+  const [shape, setShape] = useState(null)
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart || typeof ResizeObserver === 'undefined') return undefined
+    const measure = () => {
+      const columns = [...chart.querySelectorAll('.ms-pacing-bar-wrap')]
+      if (!columns.length) { setShape(null); return }
+      const chartBox = chart.getBoundingClientRect()
+      const labelHeight = columns[0].querySelector('.ms-pacing-bar-label')?.getBoundingClientRect().height || 14
+      const top = columns[0].getBoundingClientRect().top - chartBox.top + 6
+      const bottom = columns[0].getBoundingClientRect().bottom - chartBox.top - labelHeight - 6
+      const points = []
+      columns.forEach((column, index) => {
+        const value = tensions[index]
+        if (typeof value !== 'number') return
+        const box = column.getBoundingClientRect()
+        points.push({ x: box.left - chartBox.left + box.width / 2, y: bottom - ((value - 1) / 4) * (bottom - top), value, index })
+      })
+      setShape({ width: chartBox.width, height: chartBox.height, points })
+    }
+    const observer = new ResizeObserver(measure)
+    observer.observe(chart)
+    const frame = requestAnimationFrame(measure)
+    return () => { observer.disconnect(); cancelAnimationFrame(frame) }
+  }, [chartRef, tensions])
+  if (!shape || shape.points.length === 0) return null
+  return (
+    <svg className="ms-pacing-tension" width={shape.width} height={shape.height} aria-hidden="true">
+      <polyline points={shape.points.map(point => `${point.x},${point.y}`).join(' ')} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" />
+      {shape.points.map(point => <circle key={point.index} cx={point.x} cy={point.y} r="3.5" fill="var(--bg-main)" stroke="var(--accent)" strokeWidth="2" />)}
+    </svg>
+  )
+}
 
 export default function PacingChart({ scenes, chapters, acts, activeNovelId, onOpenScene, onClose }) {
   const [mode, setMode] = useState('scene')
+  const tensionEnabled = useFeatureFlag('plot_threads')
+  const [showTension, setShowTension] = useState(true)
   const [tooltip, setTooltip] = useState(null) // { bar, x, y }
   const overlayRef = useRef(null)
   const chartRef = useRef(null)
@@ -43,6 +84,7 @@ export default function PacingChart({ scenes, chapters, acts, activeNovelId, onO
                   label: scene.title || 'Scene',
                   chapterTitle: chapter.title || 'Chapter',
                   wordCount: countWords(scene.content || ''),
+                  tension: getSceneTension(scene),
                   sceneId: scene.id,
                 })
               })
@@ -69,6 +111,7 @@ export default function PacingChart({ scenes, chapters, acts, activeNovelId, onO
               label: chapter.title || 'Chapter',
               sceneCount: chScenes.length,
               wordCount,
+              tension: averageTension(chScenes),
             })
           })
       })
@@ -78,6 +121,8 @@ export default function PacingChart({ scenes, chapters, acts, activeNovelId, onO
   }, [acts, chapters, novelScenes, activeNovelId])
 
   const bars = mode === 'scene' ? sceneBars : chapterBars
+  const tensions = useMemo(() => bars.map(bar => bar.tension), [bars])
+  const coverage = useMemo(() => tensionCoverage(novelScenes), [novelScenes])
   const maxWords = Math.max(...bars.map(b => b.wordCount), 1)
   const avgWords = bars.length ? Math.round(bars.reduce((s, b) => s + b.wordCount, 0) / bars.length) : 0
   const shortBar = bars.length ? bars.reduce((a, b) => b.wordCount < a.wordCount ? b : a) : null
@@ -98,6 +143,12 @@ export default function PacingChart({ scenes, chapters, acts, activeNovelId, onO
         <div className="ms-search-header">
           <span className="ms-search-title">Pacing Chart</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {tensionEnabled && (
+              <label className="ms-pacing-tension-toggle">
+                <input type="checkbox" checked={showTension} onChange={event => setShowTension(event.target.checked)} />
+                Tension
+              </label>
+            )}
             <div className="ms-toolbar-segment" role="group" aria-label="Chart mode">
               <button
                 type="button"
@@ -193,6 +244,8 @@ export default function PacingChart({ scenes, chapters, acts, activeNovelId, onO
                     )
                   })}
 
+                  {tensionEnabled && showTension && <TensionOverlay chartRef={chartRef} tensions={tensions} />}
+
                   {tooltip && (
                     <div
                       className="ms-pacing-tooltip"
@@ -207,10 +260,21 @@ export default function PacingChart({ scenes, chapters, acts, activeNovelId, onO
                         <div className="ms-pacing-tooltip-sub">{tooltip.bar.sceneCount} scene{tooltip.bar.sceneCount !== 1 ? 's' : ''}</div>
                       )}
                       <div className="ms-pacing-tooltip-count">{tooltip.bar.wordCount.toLocaleString()} words</div>
+                      {tensionEnabled && typeof tooltip.bar.tension === 'number' && (
+                        <div className="ms-pacing-tooltip-sub">Tension {tooltip.bar.tension % 1 === 0 ? tooltip.bar.tension : tooltip.bar.tension.toFixed(1)} of 5{tooltip.bar.sceneCount == null ? ` (${TENSION_LEVELS[tooltip.bar.tension - 1].label.toLowerCase()})` : ' on average'}</div>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
+
+              {tensionEnabled && showTension && (
+                <p className="ms-pacing-tension-note" data-testid="tension-note">
+                  {coverage.rated === 0
+                    ? 'No scenes have a tension rating yet. Rate scenes from the Inspector (Scene tab) to draw a tension line.'
+                    : `${coverage.rated} of ${coverage.total} scenes have a tension rating. Scenes without one are left out of the line.`}
+                </p>
+              )}
 
               {flagged.length > 0 && (
                 <div className="ms-pacing-flagged-list">
