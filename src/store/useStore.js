@@ -589,6 +589,8 @@ export function useStore(userId = null, options = {}) {
   // The account whose cloud threads have been read successfully this session. Pushes wait for it, so an older local
   // copy can never overwrite a newer cloud copy because the first read failed or has not finished.
   const [plotThreadsReadyFor, setPlotThreadsReadyFor] = useState(null)
+  // Why optional thread sync is not working, shown in the Threads panel so it never fails silently.
+  const [plotThreadsSyncIssue, setPlotThreadsSyncIssue] = useState(null)
   const [mainLoadFinishedFor, setMainLoadFinishedFor] = useState(null)
   // Cross-tab conflicts detected by debouncedSaveItems (see CLOUD_TABLE_CONFIG):
   // a record this tab is about to sync that another tab also changed in the
@@ -1322,8 +1324,12 @@ export function useStore(userId = null, options = {}) {
             state.attempts.delete(table)
             clearTimeout(state.timers.get(table))
             state.timers.delete(table)
+            if (table === 'plot_threads') setPlotThreadsSyncIssue(null)
           },
-          () => scheduleRetry(table),
+          (error) => {
+            if (table === 'plot_threads') setPlotThreadsSyncIssue(`saving: ${String(error?.message || 'unknown error').slice(0, 160)}`)
+            scheduleRetry(table)
+          },
         ).then(() => { if (state.inFlight.get(table) === settled) state.inFlight.delete(table) })
         state.inFlight.set(table, settled)
         return settled
@@ -4091,7 +4097,12 @@ export function useStore(userId = null, options = {}) {
     if (!canSyncCloud || !plotThreadsEnabled || !userId || OFFLINE_MODE) return { ok: false, reason: 'off' }
     const owner = userId
     const loaded = await fetchPlotThreads(owner)
-    if (!loaded.ok || activeUserRef.current !== owner) return { ok: false, reason: loaded.reason || 'stale' }
+    if (activeUserRef.current !== owner) return { ok: false, reason: 'stale' }
+    if (!loaded.ok) {
+      setPlotThreadsSyncIssue(`loading: ${loaded.reason || 'unknown error'}`)
+      return { ok: false, reason: loaded.reason || 'stale' }
+    }
+    setPlotThreadsSyncIssue(null)
     const visible = withoutPendingDeletes({ plotThreads: loaded.threads }, loadPendingDeletes(owner))
     // Only threads of projects this device actually has: a row left behind by a push that raced a project delete
     // must not come back as a thread of nothing.
@@ -4709,7 +4720,7 @@ export function useStore(userId = null, options = {}) {
     worldHistory: novelWorldHistory,
     addHistoryEntry, updateHistoryEntry, deleteHistoryEntry,
     eras: novelEras, addEra, updateEra, deleteEra,
-    plotThreads: novelPlotThreads, addPlotThread, updatePlotThread, deletePlotThread, loadPlotThreadsFromCloud,
+    plotThreads: novelPlotThreads, plotThreadsSyncIssue, addPlotThread, updatePlotThread, deletePlotThread, loadPlotThreadsFromCloud,
     currentYear: activeNovel?.currentYear ?? currentYear, updateCurrentYear,
     loreEntries: novelLoreEntries, addLoreEntry, updateLoreEntry, deleteLoreEntry,
     ideaEntries: novelIdeaEntries, addIdeaEntry, updateIdeaEntry, moveIdeaEntry, deleteIdeaEntry,

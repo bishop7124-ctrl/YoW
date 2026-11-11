@@ -145,6 +145,12 @@ export default function ThreadsPanel({ store }) {
           <button type="button" className="btn btn-primary" disabled={atLimit || editing !== null} onClick={() => { setEditing('new'); setConfirmDelete(null) }}>+ New thread</button>
         )}
       </div>
+      {store.plotThreadsSyncIssue && (
+        <p className="thr-error" role="alert">
+          Threads are not syncing to your account ({store.plotThreadsSyncIssue}). They are safe on this device.{' '}
+          <button type="button" className="btn btn-ghost" onClick={() => store.loadPlotThreadsFromCloud?.()}>Try again</button>
+        </p>
+      )}
       {plotThreads.length > 0 && (
         <div className="thr-seg" role="group" aria-label="Threads view">
           <button type="button" aria-pressed={view === 'grid'} className={view === 'grid' ? 'is-active' : ''} onClick={() => setView('grid')}>Grid</button>
