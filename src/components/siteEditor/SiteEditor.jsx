@@ -34,7 +34,7 @@ function NotFound() {
 
 const fmt = (iso) => (iso ? new Date(iso).toLocaleString() : '—')
 
-export default function SiteEditor({ user, authLoading }) {
+function SiteEditorSession({ user, authLoading }) {
   const [allowed, setAllowed] = useState(null)
   const [page, setPage] = useState('home')
   const [working, setWorking] = useState(null)
@@ -47,15 +47,28 @@ export default function SiteEditor({ user, authLoading }) {
   const [uploadTick, setUploadTick] = useState(0)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
+  const [publishing, setPublishing] = useState(false)
 
   const channelRef = useRef(null)
   const saveTimer = useRef(null)
   const workingRef = useRef(null)
   const pageRef = useRef(page)
   const dirtyRef = useRef(false)
-  useEffect(() => { pageRef.current = page }, [page])
-  useEffect(() => { workingRef.current = working }, [working])
-  useEffect(() => { dirtyRef.current = dirty }, [dirty])
+  const revisionRef = useRef(0)
+  const loadIdRef = useRef(0)
+  const navigationRef = useRef(0)
+  const saveInFlightRef = useRef(null)
+  const publishingRef = useRef(false)
+  const activeRef = useRef(true)
+
+  useEffect(() => {
+    activeRef.current = true
+    return () => {
+      activeRef.current = false
+      loadIdRef.current += 1
+      clearTimeout(saveTimer.current)
+    }
+  }, [])
 
   const defaults = PAGES[page].defaults
 
@@ -98,50 +111,89 @@ export default function SiteEditor({ user, authLoading }) {
 
   const saveDraftNow = useCallback(async () => {
     clearTimeout(saveTimer.current)
-    if (!dirtyRef.current || !workingRef.current) return true
-    setSaving(true)
-    const { error: saveError } = await supabase.from('site_content_draft').upsert({
-      page_key: pageRef.current,
-      content: workingRef.current,
-      updated_at: new Date().toISOString(),
-    })
-    setSaving(false)
-    if (saveError) { setError(`Could not save the draft: ${saveError.message}`); return false }
-    setError('')
-    setDirty(false)
-    dirtyRef.current = false
-    setStatus(`Draft saved ${new Date().toLocaleTimeString()}`)
-    return true
+    // One writer per editor session. Acknowledging A must not clear an edit B
+    // made during that request; callers flush until the current revision is saved.
+    while (activeRef.current) {
+      if (saveInFlightRef.current) {
+        if (!(await saveInFlightRef.current)) return false
+        continue
+      }
+      if (!dirtyRef.current || !workingRef.current) return true
+      const key = pageRef.current
+      const revision = revisionRef.current
+      const loadId = loadIdRef.current
+      const content = workingRef.current
+      const isCurrent = () => activeRef.current && loadIdRef.current === loadId && pageRef.current === key
+      setSaving(true)
+      const attempt = (async () => {
+        try {
+          const { error: saveError } = await supabase.from('site_content_draft').upsert({
+            page_key: key, content, updated_at: new Date().toISOString(),
+          })
+          if (!isCurrent()) return false
+          if (saveError) throw saveError
+          setError('')
+          if (revisionRef.current === revision) {
+            dirtyRef.current = false
+            setDirty(false)
+            setStatus(`Draft saved ${new Date().toLocaleTimeString()}`)
+          }
+          return true
+        } catch (saveError) {
+          if (isCurrent()) setError(`Could not save the draft: ${saveError.message || 'unknown error'}`)
+          return false
+        } finally {
+          if (isCurrent()) setSaving(false)
+        }
+      })()
+      saveInFlightRef.current = attempt
+      try {
+        if (!(await attempt)) return false
+      } finally {
+        if (saveInFlightRef.current === attempt) saveInFlightRef.current = null
+      }
+    }
+    return false
   }, [])
 
   // Load the draft if there is one, otherwise what is live, otherwise defaults.
   const loadPage = useCallback(async (key) => {
+    const loadId = ++loadIdRef.current
+    const isCurrent = () => activeRef.current && loadIdRef.current === loadId && pageRef.current === key
+    workingRef.current = null
+    dirtyRef.current = false
     setWorking(null)
-    setError('')
-    const [draftRes, liveRes] = await Promise.all([
-      supabase.from('site_content_draft').select('content, updated_at').eq('page_key', key).maybeSingle(),
-      supabase.from('site_content_published').select('content, published_at').eq('page_key', key).maybeSingle(),
-    ])
-    if (draftRes.error || liveRes.error) {
-      setError(`Could not load this page: ${(draftRes.error || liveRes.error).message}. Nothing has been changed.`)
-      return
-    }
-    const base = PAGES[key].defaults
-    const liveMerged = mergeContent(base, liveRes.data?.content)
-    const start = draftRes.data ? mergeContent(base, draftRes.data.content) : liveMerged
-    setLive({ content: liveMerged, publishedAt: liveRes.data?.published_at || null })
-    setWorking(start)
     setDirty(false)
-    setStatus(draftRes.data ? `Draft from ${fmt(draftRes.data.updated_at)}` : liveRes.data ? 'Showing the live version' : 'Showing the built-in version')
+    setError('')
+    try {
+      const [draftRes, liveRes] = await Promise.all([
+        supabase.from('site_content_draft').select('content, updated_at').eq('page_key', key).maybeSingle(),
+        supabase.from('site_content_published').select('content, published_at').eq('page_key', key).maybeSingle(),
+      ])
+      if (!isCurrent()) return
+      if (draftRes.error || liveRes.error) throw draftRes.error || liveRes.error
+      const base = PAGES[key].defaults
+      const liveMerged = mergeContent(base, liveRes.data?.content)
+      const start = draftRes.data ? mergeContent(base, draftRes.data.content) : liveMerged
+      workingRef.current = start
+      revisionRef.current += 1
+      setLive({ content: liveMerged, publishedAt: liveRes.data?.published_at || null })
+      setWorking(start)
+      setStatus(draftRes.data ? `Draft from ${fmt(draftRes.data.updated_at)}` : liveRes.data ? 'Showing the live version' : 'Showing the built-in version')
+    } catch (loadError) {
+      if (isCurrent()) setError(`Could not load this page: ${loadError.message || 'unknown error'}. Nothing has been changed.`)
+    }
   }, [])
 
   useEffect(() => { if (allowed) loadPage(page) }, [allowed, page, loadPage])
 
   const refreshHistory = useCallback(async () => {
+    const key = pageRef.current
+    const loadId = loadIdRef.current
     const { data } = await supabase.from('site_content_history')
-      .select('id, content, published_at, archived_at').eq('page_key', pageRef.current)
+      .select('id, content, published_at, archived_at').eq('page_key', key)
       .order('id', { ascending: false }).limit(30)
-    setHistory(data || [])
+    if (activeRef.current && pageRef.current === key && loadIdRef.current === loadId) setHistory(data || [])
   }, [])
 
   // Image library for the picker
@@ -164,6 +216,10 @@ export default function SiteEditor({ user, authLoading }) {
   }), [uploads, refreshUploads])
 
   const onChange = (next) => {
+    if (publishingRef.current || !activeRef.current || !workingRef.current ||
+        pageRef.current !== page) return
+    workingRef.current = next
+    revisionRef.current += 1
     setWorking(next)
     setDirty(true)
     dirtyRef.current = true
@@ -179,29 +235,51 @@ export default function SiteEditor({ user, authLoading }) {
   }, [])
 
   const switchPage = async (key) => {
-    if (key === page) return
+    if (key === pageRef.current || publishingRef.current) return
+    const navigation = ++navigationRef.current
     if (!(await saveDraftNow())) return
+    if (!activeRef.current || navigationRef.current !== navigation || publishingRef.current) return
+    // Invalidate an outstanding read before React schedules the next page effect.
+    loadIdRef.current += 1
+    pageRef.current = key
+    workingRef.current = null
     setShowHistory(false)
+    setHistory([])
     setWorking(null)
     setLive(null)
     setPage(key)
   }
 
   const publish = async () => {
-    if (!working) return
-    const flags = findExcludedClaims(working)
+    if (!workingRef.current || publishingRef.current) return
+    const key = pageRef.current
+    const content = workingRef.current
+    const loadId = loadIdRef.current
+    const isCurrent = () => activeRef.current && pageRef.current === key && loadIdRef.current === loadId
+    const flags = findExcludedClaims(content)
     const warning = flags.length
       ? `\n\nHeads up: this copy mentions things YOW does not offer at launch (${flags.join(', ')}). Publish anyway?`
       : ''
-    if (!window.confirm(`Publish the ${PAGES[page].label} to the live site now?${warning}`)) return
-    if (!(await saveDraftNow())) return
-    const { error: pubError } = await supabase.rpc('publish_site_content', { p_page: page })
-    if (pubError) { setError(`Publish failed: ${pubError.message}`); return }
-    // Make this browser's cached copy match, so you see it immediately.
-    try { localStorage.setItem(`yow_site_content_v1:${page}`, JSON.stringify(working)) } catch { /* ignore */ }
-    setLive({ content: working, publishedAt: new Date().toISOString() })
-    setStatus(`Published ${new Date().toLocaleTimeString()}`)
-    setError('')
+    if (!window.confirm(`Publish the ${PAGES[key].label} to the live site now?${warning}`)) return
+    // Freeze this tab's confirmed revision until its save and publish both settle.
+    // Cross-editor conflict detection remains a separate server revision contract.
+    publishingRef.current = true
+    setPublishing(true)
+    try {
+      if (!(await saveDraftNow()) || !isCurrent()) return
+      const { data: publishedAt, error: pubError } = await supabase.rpc('publish_site_content', { p_page: key })
+      if (!isCurrent()) return
+      if (pubError) throw pubError
+      try { localStorage.setItem(`yow_site_content_v1:${key}`, JSON.stringify(content)) } catch { /* ignore */ }
+      setLive({ content, publishedAt: publishedAt || new Date().toISOString() })
+      setStatus(`Published ${new Date().toLocaleTimeString()}`)
+      setError('')
+    } catch (pubError) {
+      if (isCurrent()) setError(`Publish failed: ${pubError.message || 'unknown error'}`)
+    } finally {
+      publishingRef.current = false
+      if (activeRef.current) setPublishing(false)
+    }
   }
 
   const restore = (entry) => {
@@ -237,6 +315,7 @@ export default function SiteEditor({ user, authLoading }) {
               key={key}
               type="button"
               onClick={() => switchPage(key)}
+              disabled={publishing}
               className={`btn btn-sm ${key === page ? 'btn-primary' : 'btn-secondary'}`}
               aria-current={key === page ? 'page' : undefined}
             >
@@ -246,13 +325,13 @@ export default function SiteEditor({ user, authLoading }) {
         </nav>
         <span style={{ flex: 1 }} />
         <span role="status" style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          {saving ? 'Saving…' : dirty ? 'Unsaved changes…' : status}{unpublished ? ' · Unpublished changes' : ''}
+          {publishing ? 'Publishing…' : saving ? 'Saving…' : dirty ? 'Unsaved changes…' : status}{unpublished ? ' · Unpublished changes' : ''}
         </span>
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => window.open(`/site-preview/${page}`, 'yow-site-preview')}>
           Open live preview
         </button>
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowHistory(s => !s); refreshHistory() }}>History</button>
-        <button type="button" className="btn btn-primary btn-sm" onClick={publish} disabled={!working || saving}>Publish</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={publish} disabled={!working || saving || publishing}>Publish</button>
       </header>
 
       <main style={{ maxWidth: 820, margin: '0 auto', padding: '24px 20px 96px' }}>
@@ -263,8 +342,8 @@ export default function SiteEditor({ user, authLoading }) {
           Use “Open live preview” to see your draft in the real page while you work. Live now: {fmt(live?.publishedAt) === '—' ? 'built-in version' : fmt(live.publishedAt)}.
         </p>
         <div style={{ display: 'flex', gap: 8, margin: '0 0 20px', flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={revertToLive}>Discard draft (back to live)</button>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={resetToBuiltIn}>Reset to original text</button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={revertToLive} disabled={publishing || !working}>Discard draft (back to live)</button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={resetToBuiltIn} disabled={publishing || !working}>Reset to original text</button>
         </div>
 
         {showHistory && (
@@ -274,16 +353,24 @@ export default function SiteEditor({ user, authLoading }) {
             {history.map(entry => (
               <div key={entry.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', fontSize: 13 }}>
                 <span>Live until {fmt(entry.archived_at)}</span>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => restore(entry)}>Load into editor</button>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => restore(entry)} disabled={publishing || !working}>Load into editor</button>
               </div>
             ))}
           </section>
         )}
 
         {working
-          ? <FieldTree key={page} value={working} template={defaults} ctx={ctx} onChange={onChange} />
+          ? <fieldset disabled={publishing} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
+              <FieldTree key={page} value={working} template={defaults} ctx={ctx} onChange={onChange} />
+            </fieldset>
           : !error && <p style={{ color: 'var(--text-muted)' }}>Loading page…</p>}
       </main>
     </div>
   )
+}
+
+
+export default function SiteEditor(props) {
+  // Account changes discard the previous editor's view/callback ownership.
+  return <SiteEditorSession key={props.user?.id || 'signed-out'} {...props} />
 }

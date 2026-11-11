@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isStandalonePublicRoute, parsePublicRoute } from './appRoutes'
+import { isStandalonePublicRoute, parseAppRoute, parsePublicRoute } from './appRoutes'
 
 describe('public route parsing', () => {
   it.each([
@@ -47,5 +47,24 @@ describe('private site editor routes', () => {
     expect(parsePublicRoute('/site-preview/faq').previewPage).toBe('faq')
     expect(parsePublicRoute('/site-preview/pricing').page).toBeNull()
     expect(isStandalonePublicRoute(parsePublicRoute('/site-editor'))).toBe(true)
+  })
+})
+
+
+describe('application route safety (AUD-19)', () => {
+  it.each(['/project/%', '/project/%E0%A4%A', '/series/%ZZ'])('falls back safely for malformed identity in %s', path => {
+    expect(parseAppRoute(path, '?settings=project')).toMatchObject({ novelId: null, seriesId: null, sceneId: null, projectSettingsOpen: false })
+  })
+
+  it('keeps a valid writing project open when the scene encoding is malformed', () => {
+    expect(parseAppRoute('/project/book/writing/%E0%A4%A')).toMatchObject({ novelId: 'book', sceneId: null, layoutViewMode: 'writing' })
+  })
+
+  it('preserves valid Unicode IDs and supported account overlays', () => {
+    expect(parseAppRoute('/project/Caf%C3%A9/writing/%E9%9B%AA', '?settings=account&tab=storage')).toMatchObject({
+      novelId: 'Café', sceneId: '雪', layoutViewMode: 'writing', accountOpen: true, accountTab: 'storage',
+    })
+    expect(parseAppRoute('/series/S%C3%A9rie')).toMatchObject({ seriesId: 'Série', novelId: null })
+    expect(parseAppRoute('/dashboard', '?settings=account&tab=invalid')).toMatchObject({ accountOpen: true, accountTab: 'profile' })
   })
 })

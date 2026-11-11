@@ -3036,6 +3036,7 @@ describe('scene reorder/move cloud sync', () => {
       2,
       'user-scene-conflict',
       expect.objectContaining({ conflictOf: scene.id, content: 'My concurrent prose' }),
+      { expectedRevision: 0 },
     )
     expect(project.id).toBe(scene.novelId)
   })

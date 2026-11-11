@@ -280,7 +280,7 @@ export async function loadUserData(userId) {
   // actually-empty account. Collect failures and throw once every table has
   // been checked, so the caller can show a retry prompt instead of hydrating
   // the store with zeroed-out categories.
-  const failedTables = []
+  const failedTables = settingsResult.error ? ['user_settings'] : []
   APP_DATA_TABLES.forEach((table, i) => {
     const { data, error } = entityResults[i]
     if (error) { console.warn(`[sync] load error for ${table}:`, error); failedTables.push(table); return }

@@ -17,11 +17,16 @@ function mockStore() {
       const newId = nid('char'); calls.characters.push({ ...data, id: newId }); return newId
     },
     addLocation: (data) => { const item = { ...data, id: nid('loc') }; calls.locations.push(item); return item },
+    saveLocation: (data, id) => Object.assign(calls.locations.find(c => c.id === id), data),
     setFactions: () => {},
     addLoreEntry: (data) => { const item = { ...data, id: nid('lore') }; calls.lore.push(item); return item },
+    updateLoreEntry: (id, data) => Object.assign(calls.lore.find(c => c.id === id), data),
     addHistoryEntry: (data) => { const item = { ...data, id: nid('hist') }; calls.history.push(item); return item },
+    updateHistoryEntry: (id, data) => Object.assign(calls.history.find(c => c.id === id), data),
     addEvent: (data) => { const item = { ...data, id: nid('event') }; calls.events.push(item); return item },
+    updateEvent: (id, data) => Object.assign(calls.events.find(c => c.id === id), data),
     addIdeaEntry: (data) => { const item = { ...data, id: nid('idea') }; calls.ideas.push(item); return item },
+    updateIdeaEntry: (id, data) => Object.assign(calls.ideas.find(c => c.id === id), data),
     addAct: (title) => { const a = { id: nid('act'), title }; calls.acts.push(a); return a },
     updateAct: (id, data) => Object.assign(calls.acts.find(a => a.id === id), data),
     addChapter: (actId, title) => { const c = { id: nid('chap'), actId, title }; calls.chapters.push(c); return c },
@@ -29,8 +34,13 @@ function mockStore() {
     addScene: (chapterId, title) => { const s = { id: nid('scene'), chapterId, title }; calls.scenes.push(s); return s },
     updateScene: (id, data) => Object.assign(calls.scenes.find(s => s.id === id), data),
     addComicPage: (issueId, data) => { const p = { id: nid('page'), issueId, ...data }; calls.comicPages.push(p); return p },
+    updateComicPage: (id, data) => Object.assign(calls.comicPages.find(c => c.id === id), data),
     addComicPanel: (pageId, data) => { const p = { id: nid('panel'), pageId, ...data }; calls.comicPanels.push(p); return p },
-    saveRpgCharacter: (data) => { const id = nid('rpg'); calls.rpgCharacters.push({ ...data, id }); return id },
+    updateComicPanel: (id, data) => Object.assign(calls.comicPanels.find(c => c.id === id), data),
+    saveRpgCharacter: (data, id) => {
+      if (id) { Object.assign(calls.rpgCharacters.find(c => c.id === id), data); return id }
+      const newId = nid('rpg'); calls.rpgCharacters.push({ ...data, id: newId }); return newId
+    },
     addMap: (name, mapType) => {
       const id = nid('map')
       calls.maps.push({ id, name, mapType })
@@ -43,6 +53,7 @@ function mockStore() {
       Object.assign(map, updater(map))
     },
     addScheduleEvent: (data) => { const item = { ...data, id: nid('schedule') }; calls.schedule.push(item); return item },
+    updateScheduleEvent: (id, data) => Object.assign(calls.schedule.find(c => c.id === id), data),
     addEra: (data) => { const item = { ...data, id: nid('era') }; calls.eras.push(item); return item },
     updateWhiteboard: (board) => { calls.whiteboards.push(board) },
   }
@@ -243,14 +254,13 @@ describe('populateYowProject', () => {
     expect(store.calls.eras).toHaveLength(0)
   })
 
-  it('restores the whiteboard without needing a section toggle', () => {
+  it('omits whiteboards from additive and partial imports', () => {
     const store = mockStore()
     const data = {
       whiteboards: [{ id: 'old-wb', novelId: 'old-novel', whiteboard: { notes: [{ id: 'n1', text: 'Idea' }], groups: [] } }],
     }
     populateYowProject(store, data, {})
-    expect(store.calls.whiteboards).toHaveLength(1)
-    expect(store.calls.whiteboards[0].notes[0].text).toBe('Idea')
+    expect(store.calls.whiteboards).toHaveLength(0)
   })
 
   it('restores character builder party members', () => {

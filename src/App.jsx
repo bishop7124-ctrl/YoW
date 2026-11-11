@@ -66,7 +66,7 @@ import { trackEvent } from './utils/analytics'
 import { loadAiSettings } from './utils/aiSettings'
 import { hydrateSyncedAiSettings } from './utils/syncedAiSettings'
 import { OFFLINE_MODE } from './utils/offlineMock'
-import { isStandalonePublicRoute, parsePublicRoute } from './utils/appRoutes'
+import { ACCOUNT_SETTINGS_TABS, isStandalonePublicRoute, parseAppRoute, parsePublicRoute } from './utils/appRoutes'
 import {
   DEFAULT_CUSTOM_COLORS,
   DEFAULT_THEME,
@@ -88,7 +88,6 @@ const APP_FONT_OPTIONS = {
   dyslexia: 'Dyslexie, "OpenDyslexic", "Atkinson Hyperlegible", Verdana, Arial, sans-serif',
 }
 
-const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'storage', 'ai', 'membership'])
 const aiSetupPromptKey = (userId) => userId ? `nf_aiSetupPrompt:${userId}` : null
 
 function getLocalModeNoticeKey(userId, membership, storageMode) {
@@ -129,30 +128,7 @@ function formatResumeSaveSummary(summary = {}) {
 }
 
 function parseRoute() {
-  const path = window.location.pathname
-  const params = new URLSearchParams(window.location.search)
-  const accountTab = params.get('tab')
-  const settings = params.get('settings')
-  const overlay = {
-    accountOpen: settings === 'account',
-    accountTab: ACCOUNT_SETTINGS_TABS.has(accountTab) ? accountTab : 'profile',
-    projectSettingsOpen: settings === 'project',
-  }
-
-  const seriesMatch = path.match(/^\/series\/([^/]+)(?:\/([^/]+))?$/)
-  if (seriesMatch) {
-    return { novelId: null, seriesId: decodeURIComponent(seriesMatch[1]), section: 'dashboard', layoutViewMode: 'planning', sceneId: null, ...overlay, projectSettingsOpen: false }
-  }
-
-  const m = path.match(/^\/project\/([^/]+)(?:\/(.+))?$/)
-  if (!m) return { novelId: null, seriesId: null, section: 'dashboard', layoutViewMode: 'planning', sceneId: null, ...overlay, projectSettingsOpen: false }
-  const novelId = decodeURIComponent(m[1])
-  const sub = m[2]
-  if (sub === 'writing' || sub?.startsWith('writing/')) {
-    const sceneId = sub.startsWith('writing/') ? decodeURIComponent(sub.slice('writing/'.length)) : null
-    return { novelId, seriesId: null, section: 'dashboard', layoutViewMode: 'writing', sceneId, ...overlay }
-  }
-  return { novelId, seriesId: null, section: sub || 'dashboard', layoutViewMode: 'planning', sceneId: null, ...overlay }
+  return parseAppRoute(window.location.pathname, window.location.search)
 }
 
 function buildRoute(viewMode, novelId, seriesId, section, layoutViewMode, sceneId, overlays = {}) {
@@ -733,16 +709,9 @@ function AppInner() {
       }
     : null
 
-  const [signupPrefillEmail, setSignupPrefillEmail] = useState('')
-
   const navigatePublic = (path) => {
     window.history.pushState(null, '', path)
     setPublicRoute(parsePublicRoute(path))
-  }
-
-  const goToSignup = (email) => {
-    if (email) setSignupPrefillEmail(email)
-    navigatePublic('/signup')
   }
 
   useEffect(() => {
@@ -1355,7 +1324,6 @@ function AppInner() {
           recoveryMode={recoveryMode}
           initialScreen={desktopApp || recoveryMode || authRouteMode || openLoginAfterSignOut || hasDeepLinkTarget ? 'auth' : 'home'}
           initialMode={authRouteMode || 'login'}
-          initialEmail={signupPrefillEmail}
           variant={desktopApp ? 'desktop' : 'web'}
         />
         {!desktopApp && <CookieBanner onOpenPolicy={() => setLegalPage('cookies')} />}
