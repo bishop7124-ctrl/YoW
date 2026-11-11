@@ -304,6 +304,21 @@ export async function loadUserData(userId) {
   return result
 }
 
+// Plot threads live outside APP_DATA_TABLES on purpose: the main load treats any failing table as "this account
+// failed to load" and shows the retry screen, which must never happen because of an optional feature (or because
+// the table has not been created yet). This read is separate, only called while the `plot_threads` flag is on,
+// and reports failure as a value so the caller can leave local threads untouched.
+export async function fetchPlotThreads(userId) {
+  if (OFFLINE_MODE || !userId) return { ok: false, threads: [], reason: 'offline' }
+  try {
+    const { data, error } = await supabase.from('plot_threads').select('id, data').eq('user_id', userId).limit(5000)
+    if (error) return { ok: false, threads: [], reason: String(error.code || error.message || 'error').slice(0, 60) }
+    return { ok: true, threads: (data ?? []).map(row => row.data).filter(item => item && typeof item === 'object') }
+  } catch (error) {
+    return { ok: false, threads: [], reason: String(error?.message || 'error').slice(0, 60) }
+  }
+}
+
 // Upsert an array of items into a table (one row per item).
 // Each item must have an `id` field. novel_id is taken from item.novelId.
 // Throws on a Supabase-reported error (rather than only logging) so callers —

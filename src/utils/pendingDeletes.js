@@ -39,7 +39,7 @@ const DATA_KEY_BY_TABLE = {
   locations: 'locations', timeline_events: 'timeline', world_history: 'worldHistory', acts: 'acts',
   chapters: 'chapters', scenes: 'scenes', lore_entries: 'loreEntries', idea_entries: 'ideaEntries',
   maps_data: 'maps', whiteboards_data: 'whiteboards', story_schedule: 'storySchedule',
-  rpg_characters: 'rpgCharacters', comic_pages: 'comicPages', comic_panels: 'comicPanels', eras: 'eras',
+  rpg_characters: 'rpgCharacters', comic_pages: 'comicPages', comic_panels: 'comicPanels', eras: 'eras', plot_threads: 'plotThreads',
 }
 
 // Loaded cloud data without the records this device has already deleted.

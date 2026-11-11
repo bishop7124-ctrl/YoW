@@ -4,7 +4,7 @@
 // record), records that are not objects, or links to records that are not in the file. Those are
 // rejected up front with a plain explanation instead of importing a partly broken project.
 const COLLECTIONS = [
-  'characters', 'factions', 'locations', 'timeline', 'worldHistory', 'eras', 'acts', 'chapters', 'scenes',
+  'characters', 'factions', 'locations', 'timeline', 'worldHistory', 'eras', 'plotThreads', 'acts', 'chapters', 'scenes',
   'loreEntries', 'ideaEntries', 'maps', 'whiteboards', 'storySchedule', 'rpgCharacters', 'comicPages', 'comicPanels',
 ]
 // [collection, field, collection that field must point into, readable name of the target]

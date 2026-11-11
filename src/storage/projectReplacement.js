@@ -21,6 +21,7 @@ const COLLECTIONS = [
   ['nf_comicPages', 'comicPages'],
   ['nf_comicPanels', 'comicPanels'],
   ['nf_eras', 'eras'],
+  ['nf_plotThreads', 'plotThreads'],
   ['nf_recordConflicts', 'recordConflicts'],
 ]
 

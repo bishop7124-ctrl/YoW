@@ -19,6 +19,7 @@ const RECORD_KEYS = [
   'comicPages',
   'comicPanels',
   'eras',
+  'plotThreads',
 ]
 
 const PROJECT_SCOPED_KEYS = [
@@ -39,6 +40,7 @@ const PROJECT_SCOPED_KEYS = [
   'comicPages',
   'comicPanels',
   'eras',
+  'plotThreads',
 ]
 
 function plural(count, singular, pluralLabel = `${singular}s`) {

@@ -127,6 +127,8 @@ export const createProjectZipBlob = async (projectData, options = {}) => {
     jsonFile('data/timeline.json', projectData.timeline ?? []),
     jsonFile('data/world-history.json', projectData.worldHistory ?? []),
     jsonFile('data/eras.json', projectData.eras ?? []),
+    // Only written when the project has threads, so exports of projects without any stay exactly as before.
+    ...(Array.isArray(projectData.plotThreads) && projectData.plotThreads.length ? [jsonFile('data/plot-threads.json', projectData.plotThreads)] : []),
     jsonFile('data/acts.json', projectData.acts ?? []),
     jsonFile('data/chapters.json', projectData.chapters ?? []),
     jsonFile('data/scenes.json', projectData.scenes ?? []),

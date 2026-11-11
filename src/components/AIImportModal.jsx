@@ -780,7 +780,7 @@ export function populateYowProject(store, data, sel) {
         targetChapterId = recoveryChapter?.id
       }
       if (!targetChapterId) continue
-      const { id: oldId, novelId: _nid, chapterId: _chapterId, title, order: _order, characterIds: _c, locationIds: _l, timelineEventIds: _t, povCharacterId: _p, dismissedLinks: _dismissed, ...rest } = scene
+      const { id: oldId, novelId: _nid, chapterId: _chapterId, title, order: _order, characterIds: _c, locationIds: _l, timelineEventIds: _t, povCharacterId: _p, dismissedLinks: _dismissed, threadLinks: _threads, ...rest } = scene // plot threads are not part of this import, so thread links are dropped, not left dangling
       const created = store.addScene(targetChapterId, title || 'Scene')
       if (!created) continue
       sceneIdMap[oldId] = created.id

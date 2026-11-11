@@ -120,3 +120,18 @@ B0 (large) then B1, B2 (medium each), B3 (medium), B4, B5 (small-medium each). R
 5. Two tabs editing different threads never produce a conflict copy.
 6. The Threads view and the Inspector section work at phone width.
 7. Cross-account isolation test passes for the new table.
+
+## 11. B0 as built (2026-11-11)
+
+Built and tested, **dark** (no UI), behind the `plot_threads` flag. It differs from section 3 and section 5 in three deliberate ways, all to keep every other account's data out of harm's way:
+
+1. **No shared server function is rewritten.** The plan said the table must be added to the project-delete, replace-all and record-merge functions (each holds its own hard-coded table list). Rewriting those would change behaviour for every account the moment the migration is applied, flag or no flag. Instead the migration adds one trigger on `public.novels`: when a project row is deleted (which both `delete_project_data_atomic` and `replace_user_data_atomic` do), that project's threads are deleted in the same transaction. Account deletion cascades through the user id. `merge_records` is not used for threads.
+2. **Threads are not part of the main cloud load.** The main load treats any failing table as "this account did not load" and shows the retry screen. Threads have their own optional read (`fetchPlotThreads`), called only while the flag is on and only after the main load has finished. A missing table or a failed request leaves local threads as they are and blocks nothing. A thread present on both sides keeps the newer copy; nothing is removed by a read.
+3. **Writes wait for the first successful read.** Threads sync through the normal per-record save path, but only after the first cloud read has succeeded in that session, so an older local copy can never overwrite a newer cloud copy.
+
+What exists now: migration `supabase/migrations/20261111120000_plot_threads.sql` (owner applies) with 20 scratch-Postgres checks in `supabase/tests/plot_threads.pglite.mjs`; pure helpers in `src/utils/plotThreads.js`; store state, persistence, add/update/delete (delete also clears scene links), project export, import with id remap (scene `threadLinks` remap through the same generic path as scene character links), restore, project delete, and clear on account switch; ZIP export writes `data/plot-threads.json` only when a project has threads. The AI-import path drops thread links rather than leaving them dangling. Not done in B0: any UI (B1), threads in the storage-quota estimate (the data is tiny), cloud deletion of threads removed by a restore-from-snapshot (they come back on the next read, as for other collections).
+
+**Known limits of B0 (from the 2026-11-11 review; fixed items listed in the commit):**
+- Conflict resolution between devices is last-write-wins per thread, by each device's own `updatedAt` clock. Two devices editing different fields of one thread keep only one set of edits. Fine while threads are rarely edited; add `plot_threads` to the field-level merge allow-list when B1 makes them user-editable.
+- The project-delete cleanup is a trigger on `public.novels`. It also fires for any future code that deletes and re-creates a project row, and it is the only thing that clears threads on a replace-all restore. A restore of a backup taken before threads existed therefore removes the account's threads (locally and in the cloud), because the backup has none.
+- A thread push that races a project delete can leave a cloud row for a project that no longer exists; the cloud read ignores threads whose project this device does not have.

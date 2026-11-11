@@ -1,7 +1,7 @@
 import { wasAccountDeleted, deletedAccountStorageKeys } from '../utils/accountLocalCleanup'
 import { createAccountStorageQueue } from '../storage/accountStorageQueue'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { upsertItems, mergeItems, deleteItem, deleteProjectData, replaceUserData, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage } from '../utils/firestoreSync'
+import { upsertItems, mergeItems, deleteItem, deleteProjectData, replaceUserData, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage, fetchPlotThreads } from '../utils/firestoreSync'
 import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
@@ -19,6 +19,9 @@ import { replaceProjectStorageAtomically } from '../storage/projectReplacement'
 import { clearSceneVersions } from '../utils/sceneVersions'
 import { markCloudScenesDeleted, markCloudNovelDeleted } from '../utils/cloudSceneVersions'
 import { scenesWithoutLinks } from '../utils/sceneLinks'
+import {
+  normalizeThread, pickThreadFields, projectThreads, nextThreadOrder, scenesWithoutThreadLinks, mergeThreadLists, MAX_THREADS_PER_PROJECT,
+} from '../utils/plotThreads'
 import { countWords, nextWordHistory } from '../utils/dailyWords'
 import {
   LOCAL_WRITE_FAILED_KEY,
@@ -64,6 +67,7 @@ const PROJECT_STORAGE_KEYS = [
   'nf_comicPages',
   'nf_comicPanels',
   'nf_eras',
+  'nf_plotThreads',
   'nf_recordConflicts',
   LOCAL_WRITE_AT_KEY,
   LOCAL_OWNER_KEY,
@@ -152,6 +156,7 @@ const clearProjectRefs = (refs) => {
   refs.comicPagesRef.current = []
   refs.comicPanelsRef.current = []
   refs.erasRef.current = []
+  refs.plotThreadsRef.current = []
   refs.activeNovelIdRef.current = null
   refs.activeMapByNovelRef.current = {}
   refs.currentYearRef.current = 0
@@ -228,6 +233,7 @@ const CLOUD_TABLE_CONFIG = {
   comic_pages: { storageKey: 'nf_comicPages', label: 'Comic page' },
   comic_panels: { storageKey: 'nf_comicPanels', label: 'Comic panel' },
   eras: { storageKey: 'nf_eras', label: 'Era' },
+  plot_threads: { storageKey: 'nf_plotThreads', label: 'Plot thread' },
 }
 const recordConflictLabel = (item) => item?.name || item?.title || 'Untitled'
 // Bookkeeping fields that legitimately differ on every save and aren't
@@ -449,6 +455,7 @@ const getLocalSnapshot = () => ({
   comicPages: load('nf_comicPages', []),
   comicPanels: load('nf_comicPanels', []),
   eras: load('nf_eras', []),
+  plotThreads: load('nf_plotThreads', []),
   // Without this, importData's `setRecordConflicts(sourceData.recordConflicts
   // ?? [])` always reset to `[]` on every local-preferred boot (i.e. every
   // normal refresh/login) even though `nf_recordConflicts` itself was written
@@ -552,6 +559,7 @@ export function useStore(userId = null, options = {}) {
   const freeProjectId = options.freeProjectId ?? null
   const storageQuotaBytes = options.storageQuotaBytes ?? null
   const cloudSyncEnabled = options.cloudSyncEnabled !== false
+  const plotThreadsEnabled = options.plotThreadsEnabled === true
   const canSyncCloud = Boolean(userId && cloudSyncEnabled)
   const canUseInitialLocal = !userId || loadLocalOwner() === userId
   const loadInitial = (key, def) => canUseInitialLocal ? load(key, def) : def
@@ -577,6 +585,11 @@ export function useStore(userId = null, options = {}) {
   const [comicPages, setComicPages] = useState(() => loadInitial('nf_comicPages', []))
   const [comicPanels, setComicPanels] = useState(() => loadInitial('nf_comicPanels', []))
   const [eras, setEras] = useState(() => loadInitial('nf_eras', []))
+  const [plotThreads, setPlotThreads] = useState(() => loadInitial('nf_plotThreads', []))
+  // The account whose cloud threads have been read successfully this session. Pushes wait for it, so an older local
+  // copy can never overwrite a newer cloud copy because the first read failed or has not finished.
+  const [plotThreadsReadyFor, setPlotThreadsReadyFor] = useState(null)
+  const [mainLoadFinishedFor, setMainLoadFinishedFor] = useState(null)
   // Cross-tab conflicts detected by debouncedSaveItems (see CLOUD_TABLE_CONFIG):
   // a record this tab is about to sync that another tab also changed in the
   // meantime. Local-only bookkeeping, not synced to the cloud itself.
@@ -610,6 +623,7 @@ export function useStore(userId = null, options = {}) {
   const comicPagesRef = useRef(comicPages)
   const comicPanelsRef = useRef(comicPanels)
   const erasRef = useRef(eras)
+  const plotThreadsRef = useRef(plotThreads)
   const activeNovelIdRef = useRef(activeNovelId)
   const activeMapByNovelRef = useRef(activeMapByNovel)
   const currentYearRef = useRef(currentYear)
@@ -784,6 +798,7 @@ export function useStore(userId = null, options = {}) {
     comicPages,
     comicPanels,
     eras,
+    plotThreads,
     recordConflicts,
   }), [
     novels,
@@ -808,6 +823,7 @@ export function useStore(userId = null, options = {}) {
     comicPages,
     comicPanels,
     eras,
+    plotThreads,
     recordConflicts,
   ])
 
@@ -868,6 +884,7 @@ export function useStore(userId = null, options = {}) {
       comicPagesRef,
       comicPanelsRef,
       erasRef,
+      plotThreadsRef,
       activeNovelIdRef,
       activeMapByNovelRef,
       currentYearRef,
@@ -892,6 +909,7 @@ export function useStore(userId = null, options = {}) {
     setComicPages([])
     setComicPanels([])
     setEras([])
+    setPlotThreads([])
     setRecordConflicts([])
     setCurrentYear(0)
     setActiveNovelId(null)
@@ -1197,6 +1215,7 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => { if (persistenceBlocked.current) return; timelineRef.current = timeline; save('nf_timeline', timeline) }, [timeline])
   useEffect(() => { if (persistenceBlocked.current) return; worldHistoryRef.current = worldHistory; save('nf_worldHistory', worldHistory) }, [worldHistory])
   useEffect(() => { if (persistenceBlocked.current) return; erasRef.current = eras; save('nf_eras', eras) }, [eras])
+  useEffect(() => { if (persistenceBlocked.current) return; plotThreadsRef.current = plotThreads; save('nf_plotThreads', plotThreads) }, [plotThreads])
   useEffect(() => { if (persistenceBlocked.current) return; currentYearRef.current = currentYear; save('nf_currentYear', currentYear) }, [currentYear])
   useEffect(() => { if (persistenceBlocked.current) return; actsRef.current = acts; save('nf_acts', acts) }, [acts])
   useEffect(() => { if (persistenceBlocked.current) return; chaptersRef.current = chapters; save('nf_chapters', chapters) }, [chapters])
@@ -1417,6 +1436,7 @@ export function useStore(userId = null, options = {}) {
     comic_panels: { setter: setComicPanels, ref: comicPanelsRef, storageKey: 'nf_comicPanels' },
     scenes: { setter: setScenes, ref: scenesRef, storageKey: 'nf_scenes' },
     eras: { setter: setEras, ref: erasRef, storageKey: 'nf_eras' },
+    plot_threads: { setter: setPlotThreads, ref: plotThreadsRef, storageKey: 'nf_plotThreads' },
   }), [])
 
   // Brings back what the database merged when this tab saved (see mergeItems): fields another browser
@@ -1754,6 +1774,8 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('comic_pages', userId, comicPages) }, [userId, canSyncCloud, comicPages])
   useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('comic_panels', userId, comicPanels) }, [userId, canSyncCloud, comicPanels])
   useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveItems('eras', userId, eras) }, [userId, canSyncCloud, eras])
+  // Plot threads sync only while the `plot_threads` flag is on for this account (the table may not exist yet for anyone else).
+  useEffect(() => { if (!canSyncCloud || !plotThreadsEnabled || plotThreadsReadyFor !== userId || importing.current || !remoteReady.current) return; debouncedSaveItems('plot_threads', userId, plotThreads) }, [userId, canSyncCloud, plotThreadsEnabled, plotThreadsReadyFor, plotThreads])
   useEffect(() => { if (!canSyncCloud || importing.current || !remoteReady.current) return; debouncedSaveSettings(userId, { activeNovelId, currentYear, activeMapByNovel }) }, [userId, canSyncCloud, activeNovelId, currentYear, activeMapByNovel])
   /* eslint-enable react-hooks/exhaustive-deps */
 
@@ -1919,6 +1941,9 @@ export function useStore(userId = null, options = {}) {
     setComicPages(sourceData.comicPages ?? [])
     setComicPanels(sourceData.comicPanels ?? [])
     setEras(sourceData.eras ?? [])
+    // Threads are loaded from the cloud separately (loadPlotThreadsFromCloud), so a cloud load has no `plotThreads`
+    // key; leave this device's threads alone then. A local snapshot or recovery copy does carry them.
+    if (Array.isArray(sourceData.plotThreads)) setPlotThreads(sourceData.plotThreads)
     // A cloud load carries no recordConflicts, and wiping them here is what made a "changed in another
     // tab" warning vanish on refresh and take the other side's version with it. Keep this browser's own
     // unresolved conflicts when they belong to this account.
@@ -1962,6 +1987,8 @@ export function useStore(userId = null, options = {}) {
       comic_pages: new Map((acknowledgedSource.comicPages ?? []).map(item => [item.id, item])),
       comic_panels: new Map((acknowledgedSource.comicPanels ?? []).map(item => [item.id, item])),
       eras: new Map((acknowledgedSource.eras ?? []).map(item => [item.id, item])),
+      // Threads are acknowledged by their own read, not by this load: keep what that read recorded.
+      plot_threads: lastSyncedByTableRef.current.plot_threads ?? new Map(),
     }
     if (canSyncCloud && userId && !OFFLINE_MODE) {
       if (reconciledRecovery) {
@@ -2021,6 +2048,8 @@ export function useStore(userId = null, options = {}) {
     if (persistenceBlocked.current) return
     importing.current = false
     remoteReady.current = allowSaves
+    // Lets the optional plot-thread cloud read start only after the account's main load has finished.
+    if (allowSaves) setMainLoadFinishedFor(activeUserRef.current)
   }, [])
 
   const replaceData = useCallback(async (data) => {
@@ -2029,6 +2058,13 @@ export function useStore(userId = null, options = {}) {
     // leaves both sides on their previous version and can be reported to the
     // caller without presenting a half-restored account.
     if (canSyncCloud) await trackSync(replaceUserData(userId, data))
+    // The replace removes this account's cloud threads together with their projects (database trigger); send back
+    // the ones in the restored data so a restore never leaves them only on this device.
+    // Goes through the normal retrying save path. If the first cloud read has not succeeded yet, the read's own
+    // merge pushes any local-only thread afterwards.
+    if (canSyncCloud && plotThreadsEnabled && plotThreadsReadyFor === userId && Array.isArray(data.plotThreads) && data.plotThreads.length) {
+      debouncedSaveItems('plot_threads', userId, data.plotThreads)
+    }
     const importedNovels = data.novels ?? []
     const sourceProjectIds = new Set(importedNovels.map(novel => novel.id))
     const resolvedActiveNovelId = freeProjectId && sourceProjectIds.has(freeProjectId)
@@ -2063,7 +2099,7 @@ export function useStore(userId = null, options = {}) {
     // here could silently ignore the backup the user just selected.
     importData(normalizedData, { preferLocal: false, preserveLocalSceneConflicts: false })
     return normalizedData
-  }, [importData, userId, canSyncCloud, trackSync, freeProjectId])
+  }, [importData, userId, canSyncCloud, trackSync, freeProjectId, plotThreadsEnabled, plotThreadsReadyFor, debouncedSaveItems])
 
   // Clear all local state on sign-out
   const clearData = useCallback((options = {}) => {
@@ -2089,6 +2125,7 @@ export function useStore(userId = null, options = {}) {
       comicPagesRef,
       comicPanelsRef,
       erasRef,
+      plotThreadsRef,
       activeNovelIdRef,
       activeMapByNovelRef,
       currentYearRef,
@@ -2097,6 +2134,7 @@ export function useStore(userId = null, options = {}) {
     setTimeline([]); setWorldHistory([]); setActs([]); setChapters([])
     setScenes([]); setLoreEntries([]); setIdeaEntries([]); setMaps([]); setActiveMapByNovel({}); setWhiteboards([]); setSeries([]); setStorySchedule([]); setRpgCharacters([]); setComicPages([]); setComicPanels([]); setCurrentYear(0); setActiveNovelId(null)
     setEras([])
+    setPlotThreads([])
     setRecordConflicts([])
     lastSyncedByTableRef.current = {}
     setTimeout(() => {
@@ -3881,6 +3919,7 @@ export function useStore(userId = null, options = {}) {
       timeline: timeline.filter(e => e.novelId === id),
       worldHistory: worldHistory.filter(h => h.novelId === id),
       eras: eras.filter(e => e.novelId === id),
+      plotThreads: plotThreads.filter(thread => thread.novelId === id),
       acts: acts.filter(a => a.novelId === id),
       chapters: chapters.filter(c => c.novelId === id),
       scenes: scenes.filter(s => s.novelId === id),
@@ -3936,6 +3975,8 @@ export function useStore(userId = null, options = {}) {
     restoreCollection(timelineRef, setTimeline, 'nf_timeline', snapshot.timeline)
     restoreCollection(worldHistoryRef, setWorldHistory, 'nf_worldHistory', snapshot.worldHistory)
     restoreCollection(erasRef, setEras, 'nf_eras', snapshot.eras)
+    // Older snapshots have no threads: keep the project's current ones rather than clearing them.
+    if (Array.isArray(snapshot.plotThreads)) restoreCollection(plotThreadsRef, setPlotThreads, 'nf_plotThreads', snapshot.plotThreads)
     restoreCollection(actsRef, setActs, 'nf_acts', snapshot.acts)
     restoreCollection(chaptersRef, setChapters, 'nf_chapters', snapshot.chapters)
     restoreCollection(scenesRef, setScenes, 'nf_scenes', snapshot.scenes)
@@ -3997,6 +4038,79 @@ export function useStore(userId = null, options = {}) {
     )
     return true
   }
+
+  // ---- plot threads (Release B) ------------------------------------------------------------------------
+  // Threads belong to one project. The records and their scene links are plain additive data; the Threads UI
+  // is behind the `plot_threads` flag, and cloud sync only runs while that flag is on (see the sync effect).
+  const novelPlotThreads = projectThreads(plotThreads, activeNovelId)
+
+  const addPlotThread = (data) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId) return null
+    if (storageExceededCheck()) { return null }
+    const existing = plotThreadsRef.current.filter(thread => thread.novelId === projectId)
+    if (existing.length >= MAX_THREADS_PER_PROJECT) return null
+    const now = Date.now() // eslint-disable-line react-hooks/purity
+    const thread = normalizeThread({
+      ...pickThreadFields(data),
+      id: uid(), novelId: projectId, order: data?.order ?? nextThreadOrder(existing), createdAt: now, updatedAt: now,
+    }, projectId)
+    commitLocal(plotThreadsRef, setPlotThreads, 'nf_plotThreads', prev => [...prev, thread])
+    return thread
+  }
+  const updatePlotThread = (id, data) => {
+    const projectId = currentActiveProjectId()
+    const existing = plotThreadsRef.current.find(thread => thread.id === id && thread.novelId === projectId)
+    if (!existing) return null
+    const updated = normalizeThread({ ...existing, ...pickThreadFields(data), updatedAt: Date.now() }, projectId) // eslint-disable-line react-hooks/purity
+    commitLocal(plotThreadsRef, setPlotThreads, 'nf_plotThreads', prev => prev.map(thread => (thread.id === id ? updated : thread)))
+    return updated
+  }
+  // Deleting a thread also removes it from every scene's links, through the normal single-scene update path.
+  const deletePlotThread = (id) => {
+    const projectId = currentActiveProjectId()
+    if (!projectId || !plotThreadsRef.current.some(thread => thread.id === id && thread.novelId === projectId)) return false
+    if (canSyncCloud && plotThreadsEnabled) cloudDelete('plot_threads', id)
+    commitLocal(plotThreadsRef, setPlotThreads, 'nf_plotThreads', prev => prev.filter(thread => thread.id !== id))
+    const changed = scenesWithoutThreadLinks(scenesRef.current, [id])
+    if (changed.length) {
+      commitLocal(scenesRef, setScenes, 'nf_scenes', prev => changed.reduce((scenes, { id: sceneId, patch }) => (
+        mergeSceneUpdateWithPersistedCopy(scenes, sceneId, source => {
+          const updated = { ...source, ...patch }
+          if (canSyncCloud && projectImportDepthRef.current === 0) debouncedSaveScene(sceneId, userId, updated)
+          return updated
+        })
+      ), prev))
+    }
+    return true
+  }
+  // Brings this account's cloud threads into the local list once the flag is on and the main load has finished.
+  // Optional by design: a missing table or a failed request leaves local threads exactly as they are and never
+  // blocks or empties anything. A thread present on both sides keeps the newer copy; nothing is ever removed.
+  const loadPlotThreadsFromCloud = useCallback(async () => {
+    if (!canSyncCloud || !plotThreadsEnabled || !userId || OFFLINE_MODE) return { ok: false, reason: 'off' }
+    const owner = userId
+    const loaded = await fetchPlotThreads(owner)
+    if (!loaded.ok || activeUserRef.current !== owner) return { ok: false, reason: loaded.reason || 'stale' }
+    const visible = withoutPendingDeletes({ plotThreads: loaded.threads }, loadPendingDeletes(owner))
+    // Only threads of projects this device actually has: a row left behind by a push that raced a project delete
+    // must not come back as a thread of nothing.
+    const knownProjects = new Set(novelsRef.current.map(novel => novel.id))
+    const remote = (visible.plotThreads || [])
+      .map(thread => normalizeThread(thread, thread?.novelId || ''))
+      .filter(thread => thread.id && knownProjects.has(thread.novelId))
+    const merged = mergeThreadLists(plotThreadsRef.current, remote)
+    const base = new Map(lastSyncedByTableRef.current.plot_threads || [])
+    remote.forEach(thread => base.set(thread.id, thread))
+    lastSyncedByTableRef.current.plot_threads = base
+    commitLocal(plotThreadsRef, setPlotThreads, 'nf_plotThreads', () => merged)
+    setPlotThreadsReadyFor(owner)
+    return { ok: true, count: remote.length }
+  }, [canSyncCloud, plotThreadsEnabled, userId])
+  useEffect(() => {
+    if (!plotThreadsEnabled || !canSyncCloud || !userId || mainLoadFinishedFor !== userId) return
+    loadPlotThreadsFromCloud()
+  }, [plotThreadsEnabled, canSyncCloud, userId, mainLoadFinishedFor, loadPlotThreadsFromCloud])
 
   const addSeries = (name) => {
     if (storageExceededCheck()) return null
@@ -4070,6 +4184,7 @@ export function useStore(userId = null, options = {}) {
       timeline: timelineRef.current.filter(item => item.novelId !== id),
       worldHistory: worldHistoryRef.current.filter(item => item.novelId !== id),
       eras: erasRef.current.filter(item => item.novelId !== id),
+      plotThreads: plotThreadsRef.current.filter(item => item.novelId !== id),
       acts: actsRef.current.filter(item => item.novelId !== id),
       chapters: chaptersRef.current.filter(item => item.novelId !== id),
       scenes: scenesRef.current.filter(item => item.novelId !== id),
@@ -4107,6 +4222,7 @@ export function useStore(userId = null, options = {}) {
     timelineRef.current = nextData.timeline; setTimeline(nextData.timeline)
     worldHistoryRef.current = nextData.worldHistory; setWorldHistory(nextData.worldHistory)
     erasRef.current = nextData.eras; setEras(nextData.eras)
+    plotThreadsRef.current = nextData.plotThreads; setPlotThreads(nextData.plotThreads)
     actsRef.current = nextData.acts; setActs(nextData.acts)
     chaptersRef.current = nextData.chapters; setChapters(nextData.chapters)
     scenesRef.current = nextData.scenes; setScenes(nextData.scenes)
@@ -4160,6 +4276,7 @@ export function useStore(userId = null, options = {}) {
     // exported from is untouched either way.
     const buildIdMap = (items) => Object.fromEntries((items ?? []).map(item => [item.id, uid()]))
     const eraIdMap = buildIdMap(data.eras)
+    const plotThreadIdMap = buildIdMap(data.plotThreads)
     const characterIdMap = buildIdMap(data.characters)
     const factionIdMap = buildIdMap(data.factions)
     const locationIdMap = buildIdMap(data.locations)
@@ -4186,6 +4303,7 @@ export function useStore(userId = null, options = {}) {
     const allIdMap = {
       ...(data.project?.id ? { [data.project.id]: newId } : {}),
       ...eraIdMap,
+      ...plotThreadIdMap,
       ...characterIdMap,
       ...factionIdMap,
       ...locationIdMap,
@@ -4265,6 +4383,8 @@ export function useStore(userId = null, options = {}) {
       timelineEventId: entry.timelineEventId ? at(timelineIdMap, entry.timelineEventId) : entry.timelineEventId,
     })
     const remapEra = (era) => own(era, eraIdMap)
+    // Scenes' `threadLinks[].threadId` are remapped by `own()` through allIdMap, the same way scene character links are.
+    const remapPlotThread = (thread) => own(thread, plotThreadIdMap)
     const remapAct = (act) => own(act, actIdMap)
     const remapChapter = (chapter) => ({
       ...own(chapter, chapterIdMap),
@@ -4331,6 +4451,7 @@ export function useStore(userId = null, options = {}) {
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => [...prev, ...(data.timeline ?? []).map(remapTimeline)])
     commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => [...prev, ...(data.worldHistory ?? []).map(remapWorldHistory)])
     setEras(prev => [...prev, ...(data.eras ?? []).map(remapEra)])
+    if (Array.isArray(data.plotThreads) && data.plotThreads.length) setPlotThreads(prev => [...prev, ...data.plotThreads.map(remapPlotThread)])
     commitLocal(actsRef, setActs, 'nf_acts', prev => [...prev, ...(data.acts ?? []).map(remapAct)])
     commitLocal(chaptersRef, setChapters, 'nf_chapters', prev => [...prev, ...(data.chapters ?? []).map(remapChapter)])
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => [...prev, ...(data.scenes ?? []).map(remapScene)])
@@ -4588,6 +4709,7 @@ export function useStore(userId = null, options = {}) {
     worldHistory: novelWorldHistory,
     addHistoryEntry, updateHistoryEntry, deleteHistoryEntry,
     eras: novelEras, addEra, updateEra, deleteEra,
+    plotThreads: novelPlotThreads, addPlotThread, updatePlotThread, deletePlotThread, loadPlotThreadsFromCloud,
     currentYear: activeNovel?.currentYear ?? currentYear, updateCurrentYear,
     loreEntries: novelLoreEntries, addLoreEntry, updateLoreEntry, deleteLoreEntry,
     ideaEntries: novelIdeaEntries, addIdeaEntry, updateIdeaEntry, moveIdeaEntry, deleteIdeaEntry,

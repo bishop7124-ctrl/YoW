@@ -62,6 +62,7 @@ import { consumeUnsyncedSignOut } from './store/syncFlushRegistry'
 import { formatBytes, formatQuotaLabel } from './utils/storageQuota'
 import { isDesktopAppRuntime } from './utils/runtime'
 import UpdateBanner from './components/UpdateBanner'
+import { useFeatureFlag } from './utils/useFeatureFlag'
 import { trackEvent } from './utils/analytics'
 import { loadAiSettings } from './utils/aiSettings'
 import { hydrateSyncedAiSettings } from './utils/syncedAiSettings'
@@ -265,11 +266,13 @@ function AppInner() {
   const [resumingCloudSyncAfterLapse, setResumingCloudSyncAfterLapse] = useState(false)
   const devStorageExceeded = localStorage.getItem('__yow_storage_test') === '1'
   if (devStorageExceeded) console.warn('[YOW] storageTest mode: quota forced to 1 byte')
+  const plotThreadsFlag = useFeatureFlag('plot_threads')
   const store = useStore(userId, {
     readOnly: membership.isReadOnly || (!desktopApp && membership.isLocalMode && !membership.isCloudFreeFallback),
     freeProjectId: membership.freeProjectId,
     storageQuotaBytes: desktopApp ? null : devStorageExceeded ? 1 : membership.storageQuotaBytes,
     cloudSyncEnabled: membership.canSyncCloud && !effectiveLocalMode && !resumingCloudSyncAfterLapse,
+    plotThreadsEnabled: plotThreadsFlag,
   })
   // Cloud scene history: off unless the flag is on and this account syncs to the cloud.
   useCloudSceneHistory(userId, membership.canSyncCloud && !effectiveLocalMode && !resumingCloudSyncAfterLapse)
