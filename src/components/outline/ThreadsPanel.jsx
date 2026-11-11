@@ -145,6 +145,9 @@ export default function ThreadsPanel({ store }) {
           <button type="button" className="btn btn-primary" disabled={atLimit || editing !== null} onClick={() => { setEditing('new'); setConfirmDelete(null) }}>+ New thread</button>
         )}
       </div>
+      {store.plotThreadsSyncStage && store.plotThreadsSyncStage !== 'ready' && !store.plotThreadsSyncIssue && (
+        <p className="thr-note" role="status">Cloud sync for threads: {store.plotThreadsSyncStage}.</p>
+      )}
       {store.plotThreadsSyncIssue && (
         <p className="thr-error" role="alert">
           Threads are not syncing to your account ({store.plotThreadsSyncIssue}). They are safe on this device.{' '}
