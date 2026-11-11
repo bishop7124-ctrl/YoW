@@ -54,3 +54,40 @@ export function parsePublicRoute(path = '') {
 export function isStandalonePublicRoute(route) {
   return Boolean(route?.page && route.page !== 'auth')
 }
+
+export const ACCOUNT_SETTINGS_TABS = new Set(['profile', 'appearance', 'preferences', 'storage', 'ai', 'membership'])
+
+const decodeRouteId = value => {
+  try { return decodeURIComponent(value) || null }
+  catch { return null }
+}
+
+export function parseAppRoute(path = '/dashboard', search = '') {
+  const params = new URLSearchParams(search)
+  const accountTab = params.get('tab')
+  const settings = params.get('settings')
+  const overlay = {
+    accountOpen: settings === 'account',
+    accountTab: ACCOUNT_SETTINGS_TABS.has(accountTab) ? accountTab : 'profile',
+    projectSettingsOpen: settings === 'project',
+  }
+
+  const fallback = { novelId: null, seriesId: null, section: 'dashboard', layoutViewMode: 'planning', sceneId: null, ...overlay, projectSettingsOpen: false }
+  const seriesMatch = path.match(/^\/series\/([^/]+)(?:\/([^/]+))?$/)
+  if (seriesMatch) {
+    const seriesId = decodeRouteId(seriesMatch[1])
+    if (!seriesId) return fallback
+    return { novelId: null, seriesId, section: 'dashboard', layoutViewMode: 'planning', sceneId: null, ...overlay, projectSettingsOpen: false }
+  }
+
+  const m = path.match(/^\/project\/([^/]+)(?:\/(.+))?$/)
+  if (!m) return fallback
+  const novelId = decodeRouteId(m[1])
+  if (!novelId) return fallback
+  const sub = m[2]
+  if (sub === 'writing' || sub?.startsWith('writing/')) {
+    const sceneId = sub.startsWith('writing/') ? decodeRouteId(sub.slice('writing/'.length)) : null
+    return { novelId, seriesId: null, section: 'dashboard', layoutViewMode: 'writing', sceneId, ...overlay }
+  }
+  return { novelId, seriesId: null, section: sub || 'dashboard', layoutViewMode: 'planning', sceneId: null, ...overlay }
+}

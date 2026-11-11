@@ -8,6 +8,21 @@ This is the dedicated planning/tracking document for everything gated on real St
 
 In progress as of 2026-10-05. Stripe test products, production-environment test credentials and the production test webhook have been configured by the owner. An unlisted, no-index direct-link pricing page now exposes the real Stripe test Checkout to signed-in disposable YOW accounts while the normal public pricing page continues to use the interest flow.
 
+## 2026-11-09 full audit — AUD-06 / AUD-26 / AUD-27
+
+**AUD-06 prevention implemented on the dedicated audit branch; shared-source integration, deployment and affected-account reconciliation not performed.** Membership and the active Vercel webhook now share `isLifetimePlan`, recognizing `premium_lifetime`, `premium_plus_lifetime` and `founder`. Unrelated Monthly and Cloud-renewal subscription updates preserve permanent rights for all three aliases. No refund policy, purchase timestamp rule or revoked-plan rule was changed. Local mocked validation: 137 tests across webhook, checkout, portal, membership and the replay-runner harness passed; the webhook adds 14 transition cases, including ordinary Monthly controls. Integrated results are in ROADMAP's full-audit execution log. No migration is required for this code change.
+
+When the next controlled payment rehearsal is scheduled:
+
+1. Verify the deployed endpoint is the active Vercel webhook and includes the shared helper.
+2. On isolated test accounts for each of the three Lifetime keys, replay active/cancelled Monthly and Cloud-renewal subscription events. Check plan, permanent desktop/download rights and Cloud-period fields, plus recurring status. Verify ordinary Monthly cancellation and renewal still transition correctly.
+3. Run the legacy Lifetime portal `sync_status` case. Record exact handler revision and results. This local fix is not evidence of an already-correct deployed cohort.
+4. If affected accounts are suspected, establish the cohort with a separately scoped read-only investigation before reviewing individual metadata repairs. No automatic grants, revocations, refunds, cancellations or customer updates are part of this batch.
+
+**AUD-26 — planned:** coordinate account/plan checkout intents, bind reusable/idempotent sessions and reject unintended concurrent recurring subscriptions. First reproduce parallel/repeated requests with mocked Stripe; then design any additive intent migration and run controlled test-mode concurrency acceptance. Keep legitimate Cloud renewals and reservation paths intact.
+
+**AUD-27 — policy decision pending:** record full/partial refund and lost-dispute policy for all Lifetime aliases and Founder recognition before changing handlers. Then implement a transition matrix and test it with mocked events, followed by controlled provider rehearsal. Do not infer a blanket entitlement-revocation policy from the existing legacy handler.
+
 ## 2026-10-22 audit fixes (YOW-09 / YOW-10)
 
 Webhook fulfilment is now durable (errors fail the handler and release the claim; `processing`/`done` ledger with a 5-minute lease; Cloud extension idempotent per invoice) and a Cloud-renewal or leftover Monthly subscription can no longer overwrite a Lifetime licence. Before the next test-mode rehearsal: apply `supabase/migrations/20261022120000_stripe_event_lease.sql` (the webhook works without it, falling back to claim-only), then add to the rehearsal: (a) a Lifetime purchase followed by a Cloud-renewal subscription, confirming the plan stays Lifetime and only `maintenance_expires_at` moves; (b) cancelling the Cloud renewal and confirming Lifetime access is unchanged; (c) forcing a webhook failure and confirming Stripe's retry then applies it once.

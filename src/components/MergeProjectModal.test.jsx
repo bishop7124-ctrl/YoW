@@ -106,7 +106,7 @@ describe('MergeProjectModal', () => {
     expect(mergeButton.disabled).toBe(true)
   })
 
-  it('restores the destination snapshot when population fails', async () => {
+  it.each(['throws', 'refuses'])('restores the destination snapshot when population %s', async failure => {
     const novels = [
       { id: 'dest-1', type: 'novel', title: 'Destination', characters: [{ id: 'kept', name: 'Keep me' }] },
       { id: 'src-1', type: 'novel', title: 'Source Novel', characters: [{ id: 'source', name: 'Source character' }] },
@@ -115,7 +115,10 @@ describe('MergeProjectModal', () => {
     const beginProjectImport = vi.fn()
     const endProjectImport = vi.fn()
     const store = mockStore(novels, {
-      saveCharacter: () => { throw new Error('Injected population failure') },
+      saveCharacter: () => {
+        if (failure === 'refuses') return null
+        throw new Error('Injected population failure')
+      },
       restoreProjectSnapshot,
       beginProjectImport,
       endProjectImport,

@@ -1,5 +1,6 @@
 import Stripe from 'stripe'
 import { createClient } from '@supabase/supabase-js'
+import { isLifetimePlan } from '../src/utils/planEntitlements.js'
 
 export const config = {
   api: { bodyParser: false },
@@ -14,7 +15,6 @@ function getRawBody(req) {
   })
 }
 
-const LIFETIME_PLANS = new Set(['premium_plus_lifetime', 'founder'])
 const CLOUD_RENEWAL_PLANS = new Set(['maintenance', 'hosting_renewal'])
 
 // Every Supabase call that changes what a paying customer can do must fail the handler when it reports
@@ -36,7 +36,7 @@ export async function writeAppMetadata(supabaseAdmin, userId, existing, appMetad
 
 // Judged by the plan the account holds NOW. A refunded Founder purchase clears subscription_plan but
 // keeps lifetime_purchased_at, and that account must still be able to subscribe to Monthly.
-const holdsLifetimeLicence = (metadata = {}) => LIFETIME_PLANS.has(metadata.subscription_plan)
+const holdsLifetimeLicence = (metadata = {}) => isLifetimePlan(metadata.subscription_plan)
 
 // The subscription as Stripe holds it now. Event payloads can arrive late or out of order, and Stripe
 // does not guarantee ordering, so an event snapshot must never overwrite newer state.
@@ -61,7 +61,7 @@ export function getCurrentPeriodEnd(subscription) {
 export function buildSubscriptionAppMetadata(existing, subscription, customerId, plan) {
   // Also used by the billing portal's explicit status refresh. Every caller
   // must preserve Lifetime when a leftover Monthly subscription is refreshed.
-  if (CLOUD_RENEWAL_PLANS.has(plan) || (holdsLifetimeLicence(existing) && !LIFETIME_PLANS.has(plan))) {
+  if (CLOUD_RENEWAL_PLANS.has(plan) || (holdsLifetimeLicence(existing) && !isLifetimePlan(plan))) {
     const prefix = CLOUD_RENEWAL_PLANS.has(plan) ? 'cloud_renewal' : 'monthly'
     return { ...existing, [`${prefix}_subscription_id`]: subscription.id, [`${prefix}_subscription_status`]: subscription.status }
   }

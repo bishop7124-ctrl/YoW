@@ -1,12 +1,12 @@
 import { BILLING } from './billingConfig.js'
 import { computeCloudLifecycle } from './cloudLifecycle.js'
+import { isLifetimePlan } from './planEntitlements.js'
 
 export const TRIAL_DAYS = 28
 export const BETA_NOTICE_DAYS = 30
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const PAID_STATUSES = new Set(['active', 'trialing'])
-const LIFETIME_PLAN_KEYS = new Set(['premium_lifetime', 'premium_plus_lifetime', 'founder'])
 const BETA_TESTER_PLAN_KEY = 'beta_tester'
 
 const BETA_TESTER_PLAN = {
@@ -199,7 +199,7 @@ export function getMembership(user) {
   // has no real Stripe subscription — the billing portal has nothing to act
   // on for it (see api/create-customer-portal.js).
   const hasStripeCustomer = !!serverMetadata.stripe_customer_id
-  const isLifetime = LIFETIME_PLAN_KEYS.has(subscriptionPlan)
+  const isLifetime = isLifetimePlan(subscriptionPlan)
   // Founder is a recognition status, not a purchasable plan. New awards are
   // mirrored into server-controlled app_metadata after the database atomically
   // allocates them. The old `founder` plan remains recognised for historical

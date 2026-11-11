@@ -116,6 +116,27 @@ describe('loadUserData', () => {
     mockState.pageRequests = []
   })
 
+  it('rejects account load when settings exhaust retries instead of returning defaults (AUD-09)', async () => {
+    const { loadUserData } = await import('./firestoreSync.js')
+    mockState.errorQueues.user_settings = Array.from({ length: 3 }, () => ({ message: 'Settings unavailable' }))
+    await expect(loadUserData('user-1')).rejects.toThrow(/user_settings/)
+    expect(mockState.errorQueues.user_settings).toEqual([])
+    expect(mockState.upserts).toEqual([])
+  })
+
+  it('retries settings without losing the stored year and map selection (AUD-09)', async () => {
+    const { loadUserData } = await import('./firestoreSync.js')
+    mockState.errorQueues.user_settings = [{ message: 'Temporary settings failure' }]
+    mockState.tables.user_settings = { data: { activeNovelId: 'n', currentYear: 1300, activeMapByNovel: { n: 'map-1' } } }
+    expect(await loadUserData('user-1')).toMatchObject(mockState.tables.user_settings.data)
+    expect(mockState.upserts).toEqual([])
+  })
+
+  it('uses defaults for a genuinely absent settings row (AUD-09)', async () => {
+    const { loadUserData } = await import('./firestoreSync.js')
+    expect(await loadUserData('user-1')).toMatchObject({ activeNovelId: null, currentYear: 0, activeMapByNovel: {} })
+  })
+
   it('loads every row of a table larger than the response cap (audit YOW-06)', async () => {
     const { loadUserData } = await import('./firestoreSync.js')
     mockState.rowCap = 1000

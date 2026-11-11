@@ -160,6 +160,59 @@ describe('getCurrentPeriodEnd', () => {
 })
 
 describe('buildSubscriptionAppMetadata', () => {
+  const lifetimePlans = ['premium_lifetime', 'premium_plus_lifetime', 'founder']
+  const subscriptionUpdates = [
+    { plan: 'premium_monthly', status: 'active', prefix: 'monthly' },
+    { plan: 'premium_monthly', status: 'canceled', prefix: 'monthly' },
+    { plan: 'maintenance', status: 'active', prefix: 'cloud_renewal' },
+    { plan: 'hosting_renewal', status: 'canceled', prefix: 'cloud_renewal' },
+  ]
+
+  it.each(lifetimePlans.flatMap(lifetimePlan => subscriptionUpdates.map(update => ({ lifetimePlan, ...update }))))(
+    'preserves $lifetimePlan rights when $plan becomes $status',
+    async ({ lifetimePlan, plan, status, prefix }) => {
+      const { buildSubscriptionAppMetadata } = await import('../../api/stripe-webhook.js')
+      const { getMembership } = await import('../../src/utils/membership.js')
+      const existing = {
+        subscription_plan: lifetimePlan,
+        subscription_status: 'active',
+        lifetime_purchased_at: '2020-01-01T00:00:00.000Z',
+        hosting_included_until: '2021-01-01T00:00:00.000Z',
+        stripe_customer_id: 'cus_lifetime',
+      }
+      const subscription = { id: 'sub_recurring', status, items: { data: [] } }
+      const next = buildSubscriptionAppMetadata(existing, subscription, 'cus_recurring', plan)
+
+      expect(next).toEqual({
+        ...existing,
+        [`${prefix}_subscription_id`]: subscription.id,
+        [`${prefix}_subscription_status`]: status,
+      })
+      const membership = getMembership({ created_at: '2020-01-01T00:00:00.000Z', app_metadata: next })
+      expect(membership.isLifetime).toBe(true)
+      expect(membership.isDesktopEntitled).toBe(true)
+      expect(membership.canDownloadDesktop).toBe(true)
+    },
+  )
+
+  it.each(['active', 'canceled'])('still updates an ordinary Monthly account to %s', async (status) => {
+    const { buildSubscriptionAppMetadata } = await import('../../api/stripe-webhook.js')
+    const { getMembership } = await import('../../src/utils/membership.js')
+    const next = buildSubscriptionAppMetadata(
+      { subscription_plan: 'premium_monthly', subscription_status: 'active' },
+      { id: 'sub_monthly', status, items: { data: [] } },
+      'cus_monthly',
+      'premium_monthly',
+    )
+
+    expect(next).toMatchObject({ subscription_plan: 'premium_monthly', subscription_status: status, stripe_subscription_id: 'sub_monthly' })
+    const membership = getMembership({ created_at: '2020-01-01T00:00:00.000Z', app_metadata: next })
+    expect(membership.isLifetime).toBe(false)
+    expect(membership.isDesktopEntitled).toBe(false)
+    expect(membership.isPaid).toBe(status === 'active')
+    expect(membership.isFree).toBe(status === 'canceled')
+  })
+
   it('records canceled-monthly downgrade state in server-controlled app metadata', async () => {
     const { buildSubscriptionAppMetadata } = await import('../../api/stripe-webhook.js')
     const subscription = {

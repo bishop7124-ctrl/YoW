@@ -31,6 +31,8 @@ for f in $(ls "$ROOT"/supabase/migrations/*.sql | sort); do
 done
 echo "replayed $n migration files, $fail failed"
 if [ -f "$ROOT/scripts/db-replay/checks.sql" ] && [ "$fail" = 0 ]; then
-  $RUN "$PGBIN/psql" -h /tmp -p "$PORT" -X -d postgres -f "$ROOT/scripts/db-replay/checks.sql"
+  # A completed replay is not a pass if a security/data assertion fails. Preserve psql's
+  # exit status; the EXIT trap still stops the throwaway server.
+  $RUN "$PGBIN/psql" -h /tmp -p "$PORT" -X -v ON_ERROR_STOP=1 -d postgres -f "$ROOT/scripts/db-replay/checks.sql" || exit $?
 fi
 exit $fail

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import { BUILT_IN_IMAGES } from '../../content/siteImages'
 import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, safeFileName } from './fieldTreeUtils'
@@ -25,6 +25,27 @@ export default function ImageField({ label, value, onChange, ctx }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [uploads, setUploads] = useState([])
+  const activeRef = useRef(false)
+  const requestRef = useRef(0)
+  const latestRef = useRef({ value, onChange, ctx })
+
+  useLayoutEffect(() => {
+    activeRef.current = true
+    return () => { activeRef.current = false; requestRef.current += 1 }
+  }, [])
+
+  useLayoutEffect(() => {
+    // Array rows reuse component positions after removal/reordering. A different
+    // image value (including a later alt edit) must invalidate the former request.
+    if (latestRef.current.value !== value) {
+      requestRef.current += 1
+      setBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+    // A sibling edit retains this image's identity but changes the parent merge
+    // callback. Applying through the latest callback preserves that newer text.
+    latestRef.current = { value, onChange, ctx }
+  }, [value, onChange, ctx])
 
   useEffect(() => {
     let cancelled = false
@@ -32,14 +53,24 @@ export default function ImageField({ label, value, onChange, ctx }) {
     return () => { cancelled = true }
   }, [ctx])
 
-  const apply = async (src) => {
+  const beginRequest = () => {
+    const request = { id: ++requestRef.current, value: latestRef.current.value }
+    setError('')
+    setBusy(false)
+    return request
+  }
+  const isCurrent = (request) => activeRef.current && requestRef.current === request.id && latestRef.current.value === request.value
+
+  const apply = async (src, request = beginRequest()) => {
     const size = src ? await measure(src) : null
-    onChange({ ...value, src, ...(size || {}) })
+    if (!isCurrent(request)) return false
+    latestRef.current.onChange({ ...request.value, src, ...(size || {}) })
+    return true
   }
 
   const upload = async (file) => {
-    setError('')
     if (!file) return
+    const request = beginRequest()
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) { setError('Use a PNG, JPG, WebP or GIF image.'); return }
     if (file.size > MAX_IMAGE_BYTES) { setError('That image is over 5 MB. Please compress it first.'); return }
     setBusy(true)
@@ -49,15 +80,17 @@ export default function ImageField({ label, value, onChange, ctx }) {
       const { error: upErr } = await supabase.storage.from('site-media').upload(path, file, {
         contentType: file.type, cacheControl: '31536000', upsert: false,
       })
+      if (!isCurrent(request)) return
       if (upErr) throw upErr
       const { data } = supabase.storage.from('site-media').getPublicUrl(path)
-      await apply(data.publicUrl)
-      ctx.refreshUploads()
+      if (await apply(data.publicUrl, request)) latestRef.current.ctx.refreshUploads()
     } catch (e) {
-      setError(`Upload failed: ${e.message || 'unknown error'}`)
+      if (isCurrent(request)) setError(`Upload failed: ${e.message || 'unknown error'}`)
     } finally {
-      setBusy(false)
-      if (fileRef.current) fileRef.current.value = ''
+      if (isCurrent(request)) {
+        setBusy(false)
+        if (fileRef.current) fileRef.current.value = ''
+      }
     }
   }
 

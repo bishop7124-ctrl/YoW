@@ -11,7 +11,7 @@ import {
   assertArchiveNestingDepthOk, assertPdfInputSizeOk, assertPdfRestoreMarkerSizeOk,
 } from '../utils/archiveImportLimits'
 import { YOW_EXPORT_SCHEMA_VERSION } from '../utils/projectExportHelpers'
-import { remapSceneLinks } from '../utils/sceneLinks'
+import { createImportGraph, importRecordContent } from '../utils/importGraph'
 
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36)
 
@@ -649,239 +649,122 @@ export function populateProject(store, data, sel, typeKey = DEFAULT_TYPE) {
 }
 
 // ── Native YOW export import ──────────────────────────────────────────────────
-// Remaps all IDs (prevents collisions if the same export is imported twice),
-// preserves family-tree links, faction membership, timeline↔worldHistory links.
-
+// Additive/partial native imports create independent records in two passes.
+// Every selected record gets a new ID before its cross-record links are restored.
+// Whiteboards are intentionally excluded here: complete new-project restores
+// use importProjectFromData, which can safely retain the whole source board.
 export function populateYowProject(store, data, sel) {
-  const idMap = {}
-  const eraIdMap = {}
-  const actIdMap = {}
-  const chapterIdMap = {}
-  const sceneIdMap = {}
-  const ord = (arr) => [...(arr || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-  const remap = (oldId) => (oldId && idMap[oldId]) ? idMap[oldId] : oldId
-  const remapEra = (oldEraId) => (oldEraId && eraIdMap[oldEraId]) ? eraIdMap[oldEraId] : null
-
-  // Eras — referenced by both world history entries and timeline events below
-  if ((sel.worldHistory || sel.timeline) && data.eras?.length) {
-    for (const era of data.eras) {
-      const { id: oldId, novelId: _nid, ...rest } = era
-      const created = store.addEra(rest)
-      if (created) eraIdMap[oldId] = created.id
-    }
+  const graph = createImportGraph()
+  const unlinked = createImportGraph()
+  const pendingLinks = []
+  const ord = arr => [...(arr || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+  const content = (kind, record) => ({ ...importRecordContent(record), ...unlinked.references(kind, record) })
+  const assertWrite = (result, kind) => {
+    if (result === null || result === false) throw new Error(`Could not import ${kind}. The destination may no longer be writable.`)
+  }
+  const requireId = (created, kind) => {
+    const id = typeof created === 'string' ? created : created?.id
+    if (!id) throw new Error(`Could not import ${kind}. The destination may no longer be writable.`)
+    return id
+  }
+  const remember = (kind, source, created, update) => {
+    const id = requireId(created, kind)
+    graph.register(kind, source.id, id)
+    pendingLinks.push({ kind, source, id, update })
+    return id
   }
 
-  // Factions first — characters reference them
+  if (sel.worldHistory || sel.timeline) {
+    for (const era of data.eras || []) remember('eras', era, store.addEra(content('eras', era)), store.updateEra)
+  }
   if (sel.factions) {
-    for (const f of data.factions || []) {
-      const newId = uid()
-      idMap[f.id] = newId
-      const { id: _id, novelId: _nid, ...rest } = f
-      store.setFactions(prev => [...prev, { id: newId, novelId: store.activeNovelId, ...rest }])
+    for (const faction of data.factions || []) {
+      const id = uid()
+      assertWrite(store.setFactions(prev => [...prev, { ...content('factions', faction), id, novelId: store.activeNovelId }]), 'factions')
+      remember('factions', faction, id, (targetId, patch) => store.setFactions(prev => prev.map(item => item.id === targetId ? { ...item, ...patch } : item)))
     }
   }
-
   if (sel.characters) {
-    // Pass 1: create characters with no cross-references (avoids broken links mid-loop)
-    for (const c of data.characters || []) {
-      const { id: oldId, novelId: _nid, relationships: _r, parentIds: _p, childIds: _c, spouseIds: _sp, factionId: _f, journey: _j, ...rest } = c
-      const newId = store.saveCharacter(rest)
-      idMap[oldId] = newId
-    }
-    // Pass 2: restore relationships with remapped IDs
-    for (const c of data.characters || []) {
-      const newId = idMap[c.id]
-      if (!newId) continue
-      const patch = {}
-      const rels = (c.relationships || []).map(r => ({ ...r, targetId: remap(r.targetId) })).filter(r => r.targetId)
-      if (rels.length)                                    patch.relationships = rels
-      if (c.parentIds?.length)  patch.parentIds  = c.parentIds.map(remap).filter(Boolean)
-      if (c.childIds?.length)   patch.childIds   = c.childIds.map(remap).filter(Boolean)
-      if (c.spouseIds?.length)  patch.spouseIds  = c.spouseIds.map(remap).filter(Boolean)
-      if (c.factionId)          patch.factionId  = remap(c.factionId)
-      if (Object.keys(patch).length) store.saveCharacter(patch, newId)
-    }
+    for (const character of data.characters || []) remember('characters', character, store.saveCharacter(content('characters', character)), (id, patch) => store.saveCharacter(patch, id))
   }
-
   if (sel.locations) {
-    for (const l of data.locations || []) {
-      const { id: oldId, novelId: _nid, ...rest } = l
-      const created = store.addLocation(rest)
-      if (created?.id) idMap[oldId] = created.id
-    }
+    for (const location of data.locations || []) remember('locations', location, store.addLocation(content('locations', location)), (id, patch) => store.saveLocation(patch, id))
   }
-
   if (sel.loreEntries) {
-    for (const e of data.loreEntries || []) {
-      const { id: _id, novelId: _nid, ...rest } = e
-      store.addLoreEntry(rest)
-    }
+    for (const entry of data.loreEntries || []) remember('loreEntries', entry, store.addLoreEntry(content('loreEntries', entry)), store.updateLoreEntry)
   }
-
-  // World history first — timeline events link back to it
   if (sel.worldHistory) {
-    for (const h of ord(data.worldHistory)) {
-      const { id: oldId, novelId: _nid, timelineEventId: _tid, eraId, ...rest } = h
-      const entry = store.addHistoryEntry({ ...rest, eraId: remapEra(eraId) })
-      if (entry) idMap[oldId] = entry.id
-    }
+    for (const entry of ord(data.worldHistory)) remember('worldHistory', entry, store.addHistoryEntry(content('worldHistory', entry), { createTimeline: false }), store.updateHistoryEntry)
   }
-
   if (sel.timeline) {
-    for (const ev of ord(data.timeline)) {
-      const { id: oldId, novelId: _nid, worldHistoryEntryId, eraId, ...rest } = ev
-      // Link to the newly-created world history entry if both were imported
-      const linkedHistoryEntryId = (sel.worldHistory && worldHistoryEntryId) ? idMap[worldHistoryEntryId] : undefined
-      const created = store.addEvent(
-        { ...rest, eraId: remapEra(eraId), ...(linkedHistoryEntryId ? { linkedHistoryEntryId } : {}) },
-        { createHistory: false },
-      )
-      if (created?.id) idMap[oldId] = created.id
-    }
+    for (const event of ord(data.timeline)) remember('timeline', event, store.addEvent(content('timeline', event), { createHistory: false }), store.updateEvent)
   }
-
   if (sel.ideaEntries) {
-    for (const idea of ord(data.ideaEntries)) {
-      const { id: _id, novelId: _nid, ...rest } = idea
-      store.addIdeaEntry(rest)
-    }
+    for (const idea of ord(data.ideaEntries)) remember('ideaEntries', idea, store.addIdeaEntry(content('ideaEntries', idea)), store.updateIdeaEntry)
   }
 
   if (sel.acts) {
-    let recoveryAct = null
-    let recoveryChapter = null
+    let recoveryActId = null
+    let recoveryChapterId = null
     const ensureRecoveryAct = () => {
-      if (!recoveryAct) recoveryAct = store.addAct('Recovered outline items')
-      return recoveryAct
+      if (!recoveryActId) recoveryActId = requireId(store.addAct('Recovered outline items'), 'recovery act')
+      return recoveryActId
+    }
+    const ensureRecoveryChapter = () => {
+      if (!recoveryChapterId) recoveryChapterId = requireId(store.addChapter(ensureRecoveryAct(), 'Recovered scenes'), 'recovery chapter')
+      return recoveryChapterId
     }
     for (const act of ord(data.acts)) {
-      const { id: oldId, novelId: _nid, title, order: _order, ...rest } = act
-      const created = store.addAct(title || 'Act')
-      if (!created) continue
-      actIdMap[oldId] = created.id
-      idMap[oldId] ||= created.id
-      if (Object.keys(rest).length) store.updateAct(created.id, rest)
+      const { title, order: _order, ...rest } = content('acts', act)
+      const id = remember('acts', act, store.addAct(title || 'Act'), store.updateAct)
+      if (Object.keys(rest).length) assertWrite(store.updateAct(id, rest), 'acts')
     }
-    for (const chap of ord(data.chapters)) {
-      const targetActId = actIdMap[chap.actId] || ensureRecoveryAct()?.id
-      if (!targetActId) continue
-      const { id: oldId, novelId: _nid, actId: _actId, title, order: _order, ...rest } = chap
-      const created = store.addChapter(targetActId, title || 'Chapter', rest)
-      if (!created) continue
-      chapterIdMap[oldId] = created.id
-      idMap[oldId] ||= created.id
-      if (Object.keys(rest).length) store.updateChapter(created.id, rest)
+    for (const chapter of ord(data.chapters)) {
+      const parentId = graph.at('acts', chapter.actId) || ensureRecoveryAct()
+      const { title, actId: _actId, order: _order, ...rest } = content('chapters', chapter)
+      const id = remember('chapters', chapter, store.addChapter(parentId, title || 'Chapter', rest), store.updateChapter)
+      if (Object.keys(rest).length) assertWrite(store.updateChapter(id, rest), 'chapters')
     }
     for (const scene of ord(data.scenes)) {
-      let targetChapterId = chapterIdMap[scene.chapterId]
-      if (!targetChapterId) {
-        const targetAct = ensureRecoveryAct()
-        if (targetAct && !recoveryChapter) recoveryChapter = store.addChapter(targetAct.id, 'Recovered scenes')
-        targetChapterId = recoveryChapter?.id
-      }
-      if (!targetChapterId) continue
-      const { id: oldId, novelId: _nid, chapterId: _chapterId, title, order: _order, characterIds: _c, locationIds: _l, timelineEventIds: _t, povCharacterId: _p, dismissedLinks: _dismissed, threadLinks: _threads, ...rest } = scene // plot threads are not part of this import, so thread links are dropped, not left dangling
-      const created = store.addScene(targetChapterId, title || 'Scene')
-      if (!created) continue
-      sceneIdMap[oldId] = created.id
-      idMap[oldId] ||= created.id
-      // Structured scene links point at the NEW records; a link to something that was not imported is dropped
-      // rather than left dangling at an id from the other project.
-      const sceneFields = { ...rest, ...remapSceneLinks(scene, idMap) }
-      if (Object.keys(sceneFields).length) store.updateScene(created.id, sceneFields)
+      const parentId = graph.at('chapters', scene.chapterId) || ensureRecoveryChapter()
+      const { title, chapterId: _chapterId, order: _order, threadLinks: _threads, ...rest } = content('scenes', scene) // plot threads are not part of this import, so thread links are dropped, not left dangling
+      const id = remember('scenes', scene, store.addScene(parentId, title || 'Scene'), store.updateScene)
+      if (Object.keys(rest).length) assertWrite(store.updateScene(id, rest), 'scenes')
     }
-    // Comic pages/panels belong to the Volume/Issue structure imported above.
     for (const page of ord(data.comicPages)) {
-      const { id: oldId, novelId: _nid, issueId, characterIds, locationIds, createdAt: _ca, updatedAt: _ua, ...rest } = page
-      const created = store.addComicPage(chapterIdMap[issueId] || remap(issueId), {
-        ...rest,
-        characterIds: (characterIds || []).map(remap),
-        locationIds: (locationIds || []).map(remap),
-      })
-      if (created?.id) idMap[oldId] = created.id
+      const parentId = graph.at('chapters', page.issueId) || ensureRecoveryChapter()
+      const { issueId: _issueId, createdAt: _ca, updatedAt: _ua, ...rest } = content('comicPages', page)
+      remember('comicPages', page, store.addComicPage(parentId, rest), store.updateComicPage)
     }
     for (const panel of ord(data.comicPanels)) {
-      const { id: _id, novelId: _nid, pageId, characterIds, locationIds, createdAt: _ca, updatedAt: _ua, ...rest } = panel
-      store.addComicPanel(remap(pageId), {
-        ...rest,
-        characterIds: (characterIds || []).map(remap),
-        locationIds: (locationIds || []).map(remap),
-      })
-    }
-
-  }
-
-  // Character journeys are created before structure so their chapter/scene
-  // references can only be restored after the new outline IDs are known.
-  if (sel.characters) {
-    for (const character of data.characters || []) {
-      if (!character.journey || !idMap[character.id]) continue
-      store.saveCharacter({
-        journey: {
-          ...character.journey,
-          beats: (character.journey.beats || []).map(beat => ({
-            ...beat,
-            timelineEventId: remap(beat.timelineEventId),
-            chapterId: chapterIdMap[beat.chapterId] || beat.chapterId,
-            sceneId: sceneIdMap[beat.sceneId] || beat.sceneId,
-            linkedCharacterId: remap(beat.linkedCharacterId),
-          })),
-        },
-      }, idMap[character.id])
+      const parentId = graph.at('comicPages', panel.pageId)
+      // A panel without its page cannot be safely placed in another project's
+      // same-ID page. Let the caller restore the destination snapshot.
+      if (!parentId) throw new Error('Could not import a comic panel because its page is missing.')
+      const { pageId: _pageId, createdAt: _ca, updatedAt: _ua, ...rest } = content('comicPanels', panel)
+      remember('comicPanels', panel, store.addComicPanel(parentId, rest), store.updateComicPanel)
     }
   }
-
   if (sel.rpgCharacters) {
-    for (const c of data.rpgCharacters || []) {
-      const { id: _id, novelId: _nid, ...rest } = c
-      store.saveRpgCharacter(rest)
-    }
+    for (const character of data.rpgCharacters || []) remember('rpgCharacters', character, store.saveRpgCharacter(content('rpgCharacters', character)), (id, patch) => store.saveRpgCharacter(patch, id))
   }
-
   if (sel.maps) {
     for (const map of data.maps || []) {
-      // addMap's "active map" state update hasn't landed by the time this loop runs
-      // again (React state is async), so target the new map by its returned id rather
-      // than relying on updateActiveMapData — otherwise map content silently gets
-      // dropped (or written onto the wrong map) when importing more than one map.
-      const newMapId = store.addMap(map.name || 'Map', map.mapType || 'regional')
-      const { id: _id, novelId: _nid, name: _n, mapType: _mt, created: _c, ...rest } = map
-      // mapObjects/mapRegions/mapPins entries can each link to a Location
-      // record by id (e.g. a placed pin's "Create Location from this" link);
-      // that id gets a fresh value above (sel.locations runs before this
-      // loop) or, if Locations weren't imported at all, never existed in
-      // this project to begin with. Either way the map's own stale reference
-      // must be remapped or dropped — otherwise it silently points at
-      // another project's Location id (or, worse, an unrelated Location that
-      // happens to land on the same id when importing into an existing
-      // project) after import. Mirrors useStore.js's own remapMap (used for
-      // project duplication), which remaps all three fields the same way for
-      // exactly this reason, and AtlasBuilder.jsx's importMap, which prunes
-      // the same broken-link case for a same-project single-map JSON import.
-      const remapMapLinkedEntity = (item) => item.linkedEntity?.entityType === 'location'
-        ? { ...item, linkedEntity: idMap[item.linkedEntity.entityId] ? { entityType: 'location', entityId: idMap[item.linkedEntity.entityId] } : null }
-        : item
-      if (rest.mapObjects) rest.mapObjects = rest.mapObjects.map(remapMapLinkedEntity)
-      if (rest.mapRegions) rest.mapRegions = rest.mapRegions.map(remapMapLinkedEntity)
-      if (rest.mapPins) rest.mapPins = rest.mapPins.map(remapMapLinkedEntity)
-      if (newMapId && Object.keys(rest).length) store.updateMapData(newMapId, () => rest)
+      const id = remember('maps', map, store.addMap(map.name || 'Map', map.mapType || 'regional'), (mapId, patch) => store.updateMapData(mapId, () => patch))
+      const { name: _name, mapType: _type, created: _created, ...rest } = content('maps', map)
+      if (Object.keys(rest).length) assertWrite(store.updateMapData(id, () => rest), 'maps')
     }
   }
-
   if (sel.storySchedule) {
-    for (const ev of ord(data.storySchedule)) {
-      const { id: _id, novelId: _nid, linkedCharacters, linkedLocations, ...rest } = ev
-      store.addScheduleEvent({
-        ...rest,
-        linkedCharacters: (linkedCharacters || []).map(remap),
-        linkedLocations: (linkedLocations || []).map(remap),
-      })
-    }
+    for (const event of ord(data.storySchedule)) remember('storySchedule', event, store.addScheduleEvent(content('storySchedule', event)), store.updateScheduleEvent)
   }
 
-  // Whiteboard — one per project, no separate section toggle
-  const whiteboard = data.whiteboards?.[0]?.whiteboard
-  if (whiteboard) store.updateWhiteboard(whiteboard)
+  // Resolve cycles and forward references only after every selected ID exists.
+  // Patch only the records just created, never an existing destination record.
+  for (const { kind, source, id, update } of pendingLinks) {
+    const patch = graph.references(kind, source)
+    if (Object.keys(patch).length) assertWrite(update(id, patch), kind)
+  }
 }
 
 // Compatible structured ZIP import
@@ -1768,6 +1651,10 @@ export default function AIImportModal({ store, onClose, onImportDone, userId = n
               </div>
 
               <p style={{ margin: 0, fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Content to import</p>
+              <p style={{ margin: 0, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.45 }}>
+                Links are kept between the selected sections. Links to sections you leave out are cleared.
+                {' '}Whiteboards are included only when restoring every section into a new project; adding to an existing project or importing selected sections leaves its whiteboard unchanged.
+              </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 {YOW_SECTIONS.filter(s => yowSectionCount(yowImport, s.key) > 0).map(({ key, label }) => (
                   <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 8, cursor: 'pointer', background: selections[key] ? 'var(--accent-fade)' : 'var(--bg-main)', border: `1px solid ${selections[key] ? 'color-mix(in srgb, var(--accent) 32%, transparent)' : 'var(--border)'}`, transition: 'all .12s' }}>

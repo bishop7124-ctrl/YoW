@@ -1,7 +1,7 @@
 import { wasAccountDeleted, deletedAccountStorageKeys } from '../utils/accountLocalCleanup'
 import { createAccountStorageQueue } from '../storage/accountStorageQueue'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import { upsertItems, mergeItems, deleteItem, deleteProjectData, replaceUserData, saveUserSettings, saveSceneDoc, deleteSceneDoc, getUserStorageUsage, fetchPlotThreads } from '../utils/firestoreSync'
+import { upsertItems as writeCloudItems, mergeItems as mergeCloudItems, deleteItem, deleteProjectData, replaceUserData, saveUserSettings as writeCloudSettings, saveSceneDoc as writeCloudScene, deleteSceneDoc, getUserStorageUsage, fetchPlotThreads } from '../utils/firestoreSync'
 import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
@@ -616,6 +616,9 @@ export function useStore(userId = null, options = {}) {
   const sceneCloudRevisionRef = useRef(new Map())
   const sceneCloudRevisionSupportedRef = useRef(true)
   const sceneSaveQueueRef = useRef(new Map())
+  const sceneSaveControlsRef = useRef(null)
+  const seriesRef = useRef(series)
+  const recordConflictsRef = useRef(recordConflicts)
   const loreEntriesRef = useRef(loreEntries)
   const ideaEntriesRef = useRef(ideaEntries)
   const mapsRef = useRef(maps)
@@ -644,6 +647,59 @@ export function useStore(userId = null, options = {}) {
   const [writingSceneId, setWritingSceneId] = useState(null)
 
   // Track whether we're mid-import to suppress Firestore saves during bulk load
+  // A project deletion owns its write boundary until its cloud and local commits finish.
+  // Keep successful tombstones for this store lifetime so already-captured callbacks cannot
+  // recreate its rows; account IDs scope them independently of the active account.
+  const activeUserRef = useRef(userId)
+  activeUserRef.current = userId
+  const projectDeletionsRef = useRef(new Map())
+  const projectWritesRef = useRef(new Set())
+  const projectDeletionKey = (owner, projectId) => JSON.stringify([owner, projectId])
+  const writtenProjectIds = (table, items) => items.flatMap(item =>
+    table === 'novels' ? [item.id] : table === 'series_items' ? (item.projectOrder || []) : [item.novelId])
+  const projectWriteBlocked = useCallback((owner, projectId) =>
+    activeUserRef.current !== owner || projectDeletionsRef.current.has(projectDeletionKey(owner, projectId)), [])
+  const trackProjectWrite = useCallback((owner, projectIds, write) => {
+    let operation
+    try { operation = Promise.resolve(write()) } catch (error) { operation = Promise.reject(error) }
+    const entry = { owner, projectIds: new Set(projectIds), operation }
+    projectWritesRef.current.add(entry)
+    const forget = () => projectWritesRef.current.delete(entry)
+    operation.then(forget, forget)
+    return operation
+  }, [])
+  const prepareProjectItems = useCallback((table, owner, items = []) => {
+    if (activeUserRef.current !== owner) return []
+    return items.filter(item => !projectWriteBlocked(owner, table === 'novels' ? item.id : item.novelId))
+      .map(item => table === 'series_items' && item.projectOrder
+        ? { ...item, projectOrder: item.projectOrder.filter(id => !projectWriteBlocked(owner, id)) } : item)
+  }, [projectWriteBlocked])
+  const upsertItems = useCallback((table, owner, items) => {
+    const allowed = prepareProjectItems(table, owner, items)
+    if (!allowed.length) return Promise.resolve()
+    return trackProjectWrite(owner, writtenProjectIds(table, allowed),
+      () => writeCloudItems(table, owner, allowed))
+  }, [prepareProjectItems, trackProjectWrite])
+  const mergeItems = useCallback((table, owner, items, base) => {
+    const allowed = prepareProjectItems(table, owner, items)
+    if (!allowed.length) return Promise.resolve({ results: [], fallback: false })
+    return trackProjectWrite(owner, writtenProjectIds(table, allowed),
+      () => mergeCloudItems(table, owner, allowed, base))
+  }, [prepareProjectItems, trackProjectWrite])
+  const saveSceneDoc = useCallback((owner, scene, options) => {
+    if (projectWriteBlocked(owner, scene.novelId)) return Promise.resolve({ saved: false, cancelled: true })
+    return trackProjectWrite(owner, [scene.novelId], () => options === undefined
+      ? writeCloudScene(owner, scene) : writeCloudScene(owner, scene, options))
+  }, [projectWriteBlocked, trackProjectWrite])
+  const saveUserSettings = useCallback((owner, settings) => {
+    if (activeUserRef.current !== owner) return Promise.resolve()
+    const activeMapByNovel = Object.fromEntries(Object.entries(settings.activeMapByNovel || {})
+      .filter(([id]) => !projectWriteBlocked(owner, id)))
+    const activeNovelId = projectWriteBlocked(owner, settings.activeNovelId) ? null : settings.activeNovelId
+    return trackProjectWrite(owner, [settings.activeNovelId, ...Object.keys(settings.activeMapByNovel || {})],
+      () => writeCloudSettings(owner, { ...settings, activeNovelId, activeMapByNovel }))
+  }, [projectWriteBlocked, trackProjectWrite])
+
   const importing = useRef(false)
   // Existing-project archive imports populate several collections in one
   // synchronous pass. Keep their intermediate state off the network so a
@@ -1183,7 +1239,7 @@ export function useStore(userId = null, options = {}) {
     }
     if (canSyncCloud && projectImportDepthRef.current === 0) trackSync(saveUserSettings(userId, settings)).catch(() => {})
     return settings
-  }, [userId, canSyncCloud, trackSync])
+  }, [userId, canSyncCloud, trackSync, saveUserSettings])
 
   const selectActiveNovel = useCallback((id) => {
     const nextId = id ?? null
@@ -1254,12 +1310,12 @@ export function useStore(userId = null, options = {}) {
   useEffect(() => { if (persistenceBlocked.current) return; mapsRef.current = maps; save('nf_maps', maps) }, [maps])
   useEffect(() => { if (persistenceBlocked.current) return; activeMapByNovelRef.current = activeMapByNovel; save('nf_activeMapByNovel', activeMapByNovel) }, [activeMapByNovel])
   useEffect(() => { if (persistenceBlocked.current) return; whiteboardsRef.current = whiteboards; save('nf_whiteboards', whiteboards) }, [whiteboards])
-  useEffect(() => { if (persistenceBlocked.current) return; save('nf_series', series) }, [series])
+  useEffect(() => { if (persistenceBlocked.current) return; seriesRef.current = series; save('nf_series', series) }, [series])
   useEffect(() => { if (persistenceBlocked.current) return; storyScheduleRef.current = storySchedule; save('nf_storySchedule', storySchedule) }, [storySchedule])
   useEffect(() => { if (persistenceBlocked.current) return; rpgCharactersRef.current = rpgCharacters; save('nf_rpg_characters', rpgCharacters) }, [rpgCharacters])
   useEffect(() => { if (persistenceBlocked.current) return; comicPagesRef.current = comicPages; save('nf_comicPages', comicPages) }, [comicPages])
   useEffect(() => { if (persistenceBlocked.current) return; comicPanelsRef.current = comicPanels; save('nf_comicPanels', comicPanels) }, [comicPanels])
-  useEffect(() => { if (persistenceBlocked.current) return; save('nf_recordConflicts', recordConflicts) }, [recordConflicts])
+  useEffect(() => { if (persistenceBlocked.current) return; recordConflictsRef.current = recordConflicts; save('nf_recordConflicts', recordConflicts) }, [recordConflicts])
 
   // Debounced per-entity save — key is the table name. Diffs `items` against
   // the last snapshot this tab actually pushed for `table` (lastSyncedByTableRef)
@@ -1276,8 +1332,6 @@ export function useStore(userId = null, options = {}) {
   // lastSyncedByTableRef is the ACKNOWLEDGED base: a record only enters it after the cloud accepted
   // that version, so a failed save leaves the record "changed" and it is sent again (audit YOW-02).
   // Failures retry on their own with backoff, and on coming back online.
-  const activeUserRef = useRef(userId)
-  activeUserRef.current = userId
   // A record saved again after its delete was queued (for example a restored manuscript copy that reuses
   // ids) is no longer pending deletion.
   const forgetRestoredDeletes = (owner, table, ids) => {
@@ -1295,7 +1349,8 @@ export function useStore(userId = null, options = {}) {
         if (!latest) return undefined
         const { ownerId, items } = latest
         const prevMap = lastSyncedByTableRef.current[table] || new Map()
-        const changed = items.filter(item => prevMap.get(item.id) !== item)
+        const changed = items.filter(item => prevMap.get(item.id) !== item
+          && !projectWriteBlocked(ownerId, table === 'novels' ? item.id : item.novelId))
         if (!changed.length) {
           const present = new Set(items.map(item => item.id))
           const pruned = new Map([...prevMap].filter(([id]) => present.has(id)))
@@ -1316,7 +1371,8 @@ export function useStore(userId = null, options = {}) {
           changed.forEach(item => acknowledged.set(item.id, item))
           for (const id of [...acknowledged.keys()]) if (!stillThere.has(id)) acknowledged.delete(id)
           lastSyncedByTableRef.current[table] = acknowledged
-          if (results.length) applyMergedRecordsRef.current?.(table, results)
+          if (results.length) applyMergedRecordsRef.current?.(table, results.filter(result =>
+            !projectWriteBlocked(ownerId, table === 'novels' ? result.id : result.original?.novelId)))
           recomputeDirty(table)
         })
         const settled = trackSync(attempt, `items:${table}`).then(
@@ -1383,7 +1439,7 @@ export function useStore(userId = null, options = {}) {
       track.flushAll = debounced.flushAll
       return track
     },
-    [trackSync, resolveSyncFailure]
+    [trackSync, resolveSyncFailure, mergeItems, projectWriteBlocked]
   )
   // Pending retries belong to one signed-in account; drop them when it changes, and retry at once
   // when the browser reports it is back online.
@@ -1424,7 +1480,7 @@ export function useStore(userId = null, options = {}) {
   // updated array itself rather than relying on the ref when absent.
   const RECORD_STATE_SETTERS = useMemo(() => ({
     novels: { setter: setNovels, ref: novelsRef, storageKey: 'nf_novels' },
-    series_items: { setter: setSeries, ref: null, storageKey: 'nf_series' },
+    series_items: { setter: setSeries, ref: seriesRef, storageKey: 'nf_series' },
     characters: { setter: setCharacters, ref: charactersRef, storageKey: 'nf_characters' },
     factions: { setter: setFactions, ref: factionsRef, storageKey: 'nf_factions' },
     locations: { setter: setLocations, ref: locationsRef, storageKey: 'nf_locations' },
@@ -1516,7 +1572,7 @@ export function useStore(userId = null, options = {}) {
       }
       return prev.filter(c => c.id !== conflictId)
     })
-  }, [canSyncCloud, userId, debouncedSaveItems, trackSync, RECORD_STATE_SETTERS])
+  }, [canSyncCloud, userId, debouncedSaveItems, trackSync, RECORD_STATE_SETTERS, saveSceneDoc])
 
   // Keeps this tab's version (already saved) and just dismisses the warning.
   const discardRecordConflict = useCallback((conflictId) => {
@@ -1531,17 +1587,23 @@ export function useStore(userId = null, options = {}) {
   // Debounced user-settings save (activeNovelId, currentYear, activeMapByNovel)
   const debouncedSaveSettings = useMemo(
     () => debounce((uid, settings) => trackSync(saveUserSettings(uid, settings)).catch(() => {}), 2000),
-    [trackSync]
+    [trackSync, saveUserSettings]
   )
 
   const saveSceneWithoutClobbering = useCallback((sceneId, uidValue, scene) => {
     const previous = sceneSaveQueueRef.current.get(sceneId) || Promise.resolve()
+    const intent = sceneSyncRef.current.latest.get(sceneId)
     const queued = previous.catch(() => {}).then(async () => {
+      const stillWanted = () => !projectWriteBlocked(uidValue, scene.novelId)
+        && sceneSyncRef.current.latest.get(sceneId)?.uidValue === uidValue
+      // A superseded queued edit must not acquire a revision from a later conflict.
+      if (!stillWanted() || sceneSyncRef.current.latest.get(sceneId) !== intent) return { cancelled: true }
       if (!sceneCloudRevisionSupportedRef.current) {
         throw new Error('Cloud scene saving is paused until the scene-safety database migration is deployed. Your draft remains saved on this device.')
       }
       const expectedRevision = sceneCloudRevisionRef.current.get(sceneId) ?? 0
       const result = await saveSceneDoc(uidValue, scene, { expectedRevision })
+      if (!stillWanted()) return { cancelled: true }
       if (result?.saved !== false) {
         sceneCloudRevisionRef.current.set(sceneId, Number(result?.revision ?? expectedRevision + 1))
         return result
@@ -1549,31 +1611,35 @@ export function useStore(userId = null, options = {}) {
 
       const remoteScene = result.remoteScene
       if (!remoteScene?.id && result.reason === 'missing') {
-        // The scene was deleted elsewhere while this device still holds edits to it. Keep the writing:
-        // save it again as a new cloud row rather than retrying a stale revision forever.
+        // Recover an edit deleted on another device, but never resurrect a project this
+        // device is intentionally deleting. The project barrier also tracks this write.
         const recreated = await saveSceneDoc(uidValue, scene)
-        sceneCloudRevisionRef.current.set(sceneId, Number(recreated?.revision ?? 1))
+        if (stillWanted()) sceneCloudRevisionRef.current.set(sceneId, Number(recreated?.revision ?? 1))
         return recreated
       }
       if (!remoteScene?.id) throw new Error('Scene changed elsewhere, but the current cloud copy could not be recovered.')
-      if (activeUserRef.current !== uidValue) return result // the account changed while this saved
-      const conflictCopy = createSceneConflictCopy(scene)
+      // Preserve typing that arrived while this request was in flight, then retire every
+      // queued attempt for the rejected original. Its newer revision belongs to the remote
+      // prose; it must never authorize a retry of the rejected local prose (AUD-01).
+      const latestScene = sceneSyncRef.current.latest.get(sceneId)?.scene || scene
+      let conflictCopy = createSceneConflictCopy(latestScene)
+      sceneSaveControlsRef.current.cancel(sceneId)
       sceneCloudRevisionRef.current.set(sceneId, Number(result.revision || 0))
       commitLocal(scenesRef, setScenes, 'nf_scenes', prev => {
-        const alreadyPreserved = prev.some(item => item.conflictOf === sceneId && item.content === conflictCopy.content)
+        const preserved = prev.find(item => item.conflictOf === sceneId && item.content === conflictCopy.content)
+        if (preserved) conflictCopy = preserved
         const withRemote = prev.map(item => item.id === sceneId ? remoteScene : item)
-        return alreadyPreserved ? withRemote : [...withRemote, conflictCopy]
+        return preserved ? withRemote : [...withRemote, conflictCopy]
       })
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('yow-scene-save-conflict', {
           detail: { sceneId, remoteScene, conflictId: conflictCopy.id },
         }))
       }
-      // The attempted prose is saved under a fresh id. Even if this secondary
-      // cloud write fails, commitLocal has already made the conflict copy durable
-      // in the browser/desktop vault and importData preserves local copies. The
-      // editor is notified before this request so it stops editing immediately.
-      await saveSceneDoc(uidValue, conflictCopy)
+      // The copy has its own durable dirty entry, revision and retry key. Its failure
+      // cannot restart the rejected original; awaiting its first attempt also lets a
+      // sign-out flush observe that attempt before archiving the remaining dirty work.
+      await sceneSaveControlsRef.current.saveNow(conflictCopy.id, uidValue, conflictCopy)
       return result
     })
     const settled = queued.finally(() => {
@@ -1581,7 +1647,7 @@ export function useStore(userId = null, options = {}) {
     })
     sceneSaveQueueRef.current.set(sceneId, settled)
     return settled
-  }, [commitLocal])
+  }, [commitLocal, projectWriteBlocked, saveSceneDoc])
 
   // Debounced, serialized cloud save for individual scenes (1s delay). The
   // server atomically rejects a stale revision instead of last-write-wins.
@@ -1624,15 +1690,17 @@ export function useStore(userId = null, options = {}) {
         const latest = state.latest.get(sceneId)
         if (!latest) return undefined
         const { uidValue, scene } = latest
-        const editAtSend = state.edits.get(sceneId)
-        const attempt = saveSceneWithoutClobbering(sceneId, uidValue, scene).then(() => {
+        if (projectWriteBlocked(uidValue, scene.novelId)) return undefined
+        const attempt = saveSceneWithoutClobbering(sceneId, uidValue, scene).then((result) => {
+          if (activeUserRef.current !== uidValue || result?.cancelled) return
           state.attempts.delete(sceneId)
           clearTimeout(state.timers.get(sceneId))
           state.timers.delete(sceneId)
-          if (state.edits.get(sceneId) === editAtSend) clearDirty(sceneId, uidValue)
+          if (state.latest.get(sceneId) === latest) clearDirty(sceneId, uidValue)
           else refreshBase(sceneId, uidValue)
         })
         return trackSync(attempt, `scene:${sceneId}`).catch(() => {
+          if (!state.latest.has(sceneId) || projectWriteBlocked(uidValue, scene.novelId)) return
           const attemptNumber = state.attempts.get(sceneId) || 0
           state.attempts.set(sceneId, attemptNumber + 1)
           clearTimeout(state.timers.get(sceneId))
@@ -1661,10 +1729,16 @@ export function useStore(userId = null, options = {}) {
         if (uidValue) clearDirty(sceneId, uidValue)
       }
       track.flushAll = debounced.flushAll
+      track.saveNow = (sceneId, uidValue, scene) => {
+        track(sceneId, uidValue, scene)
+        debounced.cancel(sceneId)
+        return send(sceneId)
+      }
       return track
     },
-    [saveSceneWithoutClobbering, trackSync, resolveSyncFailure]
+    [saveSceneWithoutClobbering, trackSync, resolveSyncFailure, projectWriteBlocked]
   )
+  sceneSaveControlsRef.current = debouncedSaveScene
 
   // Cloud deletes (audit YOW-07). Each delete is remembered on this device until the cloud confirms it,
   // retried with backoff and when the browser is back online, run after any in-flight save of the same
@@ -2043,7 +2117,7 @@ export function useStore(userId = null, options = {}) {
         trackSync(upsertItems('rpg_characters', userId, healedRpgCharacterChanges)).catch(() => {})
       }
     }, 500)
-  }, [userId, canSyncCloud, freeProjectId, trackSync, debouncedSaveItems, debouncedSaveScene, runPendingDelete])
+  }, [userId, canSyncCloud, freeProjectId, trackSync, debouncedSaveItems, debouncedSaveScene, runPendingDelete, saveUserSettings, upsertItems])
 
   useEffect(() => {
     if (!freeProjectId || !novels.some(novel => novel.id === freeProjectId)) return
@@ -2062,6 +2136,28 @@ export function useStore(userId = null, options = {}) {
   }, [])
 
   const replaceData = useCallback(async (data) => {
+    const restoringDeletedIds = new Set((data.novels ?? []).map(novel => novel.id)
+      .filter(id => projectDeletionsRef.current.has(projectDeletionKey(userId, id))))
+    if ([...restoringDeletedIds].some(id => projectDeletionsRef.current.get(projectDeletionKey(userId, id))?.pending)) {
+      throw new Error('Wait for project deletion to finish before restoring this backup.')
+    }
+    // Retire obsolete intent before reusing an explicitly restored project ID.
+    // Ordinary login hydration never releases successful deletion barriers.
+    const retiredSceneIds = []
+    for (const [sceneId, latest] of sceneSyncRef.current.latest) {
+      if (latest.uidValue === userId && restoringDeletedIds.has(latest.scene.novelId)) {
+        retiredSceneIds.push(sceneId)
+        debouncedSaveScene.cancel(sceneId)
+      }
+    }
+    for (const [table, latest] of itemSyncRef.current.latest) {
+      if (latest.ownerId !== userId || !restoringDeletedIds.size) continue
+      itemSyncRef.current.latest.set(table, { ...latest, items: latest.items
+        .filter(item => !restoringDeletedIds.has(table === 'novels' ? item.id : item.novelId))
+        .map(item => table === 'series_items' && item.projectOrder
+          ? { ...item, projectOrder: item.projectOrder.filter(id => !restoringDeletedIds.has(id)) } : item) })
+    }
+    await Promise.allSettled(retiredSceneIds.map(id => sceneSaveQueueRef.current.get(id)).filter(Boolean))
     // Commit the selected replacement to cloud storage before changing the
     // rendered/local copy. The RPC is one database transaction, so failure
     // leaves both sides on their previous version and can be reported to the
@@ -2103,12 +2199,13 @@ export function useStore(userId = null, options = {}) {
       markLocalWriteFailed('nf_projectReplacement')
       throw error
     }
+    for (const id of restoringDeletedIds) projectDeletionsRef.current.delete(projectDeletionKey(userId, id))
     // An explicit restore choice is authoritative. The login reconciliation
     // path may prefer a very recent local edit, but applying that heuristic
     // here could silently ignore the backup the user just selected.
     importData(normalizedData, { preferLocal: false, preserveLocalSceneConflicts: false })
     return normalizedData
-  }, [importData, userId, canSyncCloud, trackSync, freeProjectId, plotThreadsEnabled, plotThreadsReadyFor, debouncedSaveItems])
+  }, [importData, userId, canSyncCloud, trackSync, freeProjectId, plotThreadsEnabled, plotThreadsReadyFor, debouncedSaveItems, debouncedSaveScene])
 
   // Clear all local state on sign-out
   const clearData = useCallback((options = {}) => {
@@ -2763,7 +2860,7 @@ export function useStore(userId = null, options = {}) {
         .forEach(scene => saveSceneDoc(userId, scene).catch(console.error))
     }
     return nextScenes.find(scene => scene.id === sceneId) || null
-  }, [activeOutlineProjectId, userId, canSyncCloud, debouncedSaveScene, commitLocal, storageQuotaBytes, storageUsedBytes])
+  }, [activeOutlineProjectId, userId, canSyncCloud, debouncedSaveScene, commitLocal, storageQuotaBytes, storageUsedBytes, saveSceneDoc])
 
   const deleteAct = (id) => {
     const projectId = activeOutlineProjectId()
@@ -2952,7 +3049,7 @@ export function useStore(userId = null, options = {}) {
     setWritingSceneId(null)
     setSelectedSceneId(null)
     return { acts: nextActs, chapters: nextChapters, scenes: nextScenes }
-  }, [canSyncCloud, userId, commitLocal, debouncedSaveScene, trackSync])
+  }, [canSyncCloud, userId, commitLocal, debouncedSaveScene, trackSync, upsertItems])
 
   const retireManuscript = useCallback((title) => {
     const projectId = activeNovelIdRef.current
@@ -4181,92 +4278,140 @@ export function useStore(userId = null, options = {}) {
     if (isFreeLockedProject(id)) { notifyReadOnly('free-project'); return false }
     const deletedNovel = novelsRef.current.find(n => n.id === id)
     if (!deletedNovel) return false
-    const mediaUrls = [
-      deletedNovel?.coverPhoto,
-      deletedNovel?.bannerImage,
-      ...charactersRef.current.filter(c => c.novelId === id).map(c => c.image),
-      ...factionsRef.current.filter(f => f.novelId === id).map(f => f.logo?.image),
-    ]
-    const removedSceneIds = new Set(scenesRef.current.filter(s => s.novelId === id).map(s => s.id))
-    const nextActiveMapByNovel = { ...activeMapByNovelRef.current }
-    delete nextActiveMapByNovel[id]
-    const nextData = {
-      novels: novelsRef.current.filter(n => n.id !== id),
-      characters: charactersRef.current.filter(item => item.novelId !== id),
-      factions: factionsRef.current.filter(item => item.novelId !== id),
-      locations: locationsRef.current.filter(item => item.novelId !== id),
-      timeline: timelineRef.current.filter(item => item.novelId !== id),
-      worldHistory: worldHistoryRef.current.filter(item => item.novelId !== id),
-      eras: erasRef.current.filter(item => item.novelId !== id),
-      plotThreads: plotThreadsRef.current.filter(item => item.novelId !== id),
-      acts: actsRef.current.filter(item => item.novelId !== id),
-      chapters: chaptersRef.current.filter(item => item.novelId !== id),
-      scenes: scenesRef.current.filter(item => item.novelId !== id),
-      loreEntries: loreEntriesRef.current.filter(item => item.novelId !== id),
-      ideaEntries: ideaEntriesRef.current.filter(item => item.novelId !== id),
-      maps: mapsRef.current.filter(item => item.novelId !== id),
-      whiteboards: whiteboardsRef.current.filter(item => item.novelId !== id),
-      series: series.map(item => ({
-        ...item,
-        projectOrder: (item.projectOrder ?? []).filter(projectId => projectId !== id),
-      })),
-      storySchedule: storyScheduleRef.current.filter(item => item.novelId !== id),
-      rpgCharacters: rpgCharactersRef.current.filter(item => item.novelId !== id),
-      comicPages: comicPagesRef.current.filter(item => item.novelId !== id),
-      comicPanels: comicPanelsRef.current.filter(item => item.novelId !== id),
-      activeMapByNovel: nextActiveMapByNovel,
-      currentYear: currentYearRef.current,
-      activeNovelId: activeNovelIdRef.current === id ? null : activeNovelIdRef.current,
-      recordConflicts,
-    }
-
-    if (canSyncCloud) await trackSync(deleteProjectData(userId, id))
+    const deletionKey = projectDeletionKey(userId, id)
+    const existingDeletion = projectDeletionsRef.current.get(deletionKey)
+    if (existingDeletion?.pending) return false
+    const deletion = existingDeletion || { cloudDeleted: false }
+    deletion.pending = true
+    projectDeletionsRef.current.set(deletionKey, deletion)
     try {
-      await replaceProjectStorageAtomically(nextData, { ownerId: userId })
-      clearLocalWriteFailed('nf_projectReplacement')
-    } catch (error) {
-      markLocalWriteFailed('nf_projectReplacement')
-      throw error
-    }
+      try {
+        const pendingWrites = [...projectWritesRef.current]
+          .filter(entry => entry.owner === userId && entry.projectIds.has(id))
+          .map(entry => entry.operation)
+        await Promise.allSettled(pendingWrites)
+        if (activeUserRef.current !== userId) return false
+        if (canSyncCloud && !deletion.cloudDeleted) {
+          await trackSync(deleteProjectData(userId, id))
+          deletion.cloudDeleted = true
+        }
+        if (activeUserRef.current !== userId) return false
+      } catch (error) {
+        projectDeletionsRef.current.delete(deletionKey)
+        // A rejected delete leaves the project and its unsent edits intact. Re-arm work
+        // that may have reached its debounce/retry timer while the barrier was raised.
+        for (const [table, latest] of itemSyncRef.current.latest) {
+          if (latest.ownerId === userId) debouncedSaveItems(table, userId, latest.items)
+        }
+        for (const [sceneId, latest] of sceneSyncRef.current.latest) {
+          if (latest.uidValue === userId && latest.scene.novelId === id) debouncedSaveScene(sceneId, userId, latest.scene)
+        }
+        throw error
+      }
+      const mediaUrls = [
+        deletedNovel?.coverPhoto,
+        deletedNovel?.bannerImage,
+        ...charactersRef.current.filter(c => c.novelId === id).map(c => c.image),
+        ...factionsRef.current.filter(f => f.novelId === id).map(f => f.logo?.image),
+      ]
+      const removedSceneIds = new Set(scenesRef.current.filter(s => s.novelId === id).map(s => s.id))
+      const snapshotRefs = [
+        novelsRef, charactersRef, factionsRef, locationsRef, timelineRef, worldHistoryRef, erasRef, plotThreadsRef, actsRef, chaptersRef, scenesRef, loreEntriesRef, ideaEntriesRef, mapsRef, whiteboardsRef, seriesRef, storyScheduleRef, rpgCharactersRef, comicPagesRef, comicPanelsRef, activeMapByNovelRef, currentYearRef, activeNovelIdRef, recordConflictsRef,
+      ]
+      let nextData
+      // Disk replacement yields on IndexedDB/SQLite. Rebuild if another edit
+      // arrived, so the final transaction and rendered state retain that edit.
+      while (true) {
+        const sourceValues = snapshotRefs.map(ref => ref.current)
+        const nextActiveMapByNovel = { ...activeMapByNovelRef.current }
+        delete nextActiveMapByNovel[id]
+        nextData = {
+          novels: novelsRef.current.filter(n => n.id !== id),
+          characters: charactersRef.current.filter(item => item.novelId !== id),
+          factions: factionsRef.current.filter(item => item.novelId !== id),
+          locations: locationsRef.current.filter(item => item.novelId !== id),
+          timeline: timelineRef.current.filter(item => item.novelId !== id),
+          worldHistory: worldHistoryRef.current.filter(item => item.novelId !== id),
+          eras: erasRef.current.filter(item => item.novelId !== id),
+          plotThreads: plotThreadsRef.current.filter(item => item.novelId !== id),
+          acts: actsRef.current.filter(item => item.novelId !== id),
+          chapters: chaptersRef.current.filter(item => item.novelId !== id),
+          scenes: scenesRef.current.filter(item => item.novelId !== id),
+          loreEntries: loreEntriesRef.current.filter(item => item.novelId !== id),
+          ideaEntries: ideaEntriesRef.current.filter(item => item.novelId !== id),
+          maps: mapsRef.current.filter(item => item.novelId !== id),
+          whiteboards: whiteboardsRef.current.filter(item => item.novelId !== id),
+          series: seriesRef.current.map(item => ({
+            ...item,
+            projectOrder: (item.projectOrder ?? []).filter(projectId => projectId !== id),
+          })),
+          storySchedule: storyScheduleRef.current.filter(item => item.novelId !== id),
+          rpgCharacters: rpgCharactersRef.current.filter(item => item.novelId !== id),
+          comicPages: comicPagesRef.current.filter(item => item.novelId !== id),
+          comicPanels: comicPanelsRef.current.filter(item => item.novelId !== id),
+          activeMapByNovel: nextActiveMapByNovel,
+          currentYear: currentYearRef.current,
+          activeNovelId: activeNovelIdRef.current === id ? null : activeNovelIdRef.current,
+          recordConflicts: recordConflictsRef.current,
+        }
 
-    novelsRef.current = nextData.novels; setNovels(nextData.novels)
-    charactersRef.current = nextData.characters; setCharacters(nextData.characters)
-    factionsRef.current = nextData.factions; setFactions(nextData.factions)
-    locationsRef.current = nextData.locations; setLocations(nextData.locations)
-    timelineRef.current = nextData.timeline; setTimeline(nextData.timeline)
-    worldHistoryRef.current = nextData.worldHistory; setWorldHistory(nextData.worldHistory)
-    erasRef.current = nextData.eras; setEras(nextData.eras)
-    plotThreadsRef.current = nextData.plotThreads; setPlotThreads(nextData.plotThreads)
-    actsRef.current = nextData.acts; setActs(nextData.acts)
-    chaptersRef.current = nextData.chapters; setChapters(nextData.chapters)
-    scenesRef.current = nextData.scenes; setScenes(nextData.scenes)
-    loreEntriesRef.current = nextData.loreEntries; setLoreEntries(nextData.loreEntries)
-    ideaEntriesRef.current = nextData.ideaEntries; setIdeaEntries(nextData.ideaEntries)
-    mapsRef.current = nextData.maps; setMaps(nextData.maps)
-    whiteboardsRef.current = nextData.whiteboards; setWhiteboards(nextData.whiteboards)
-    setSeries(nextData.series)
-    storyScheduleRef.current = nextData.storySchedule; setStorySchedule(nextData.storySchedule)
-    rpgCharactersRef.current = nextData.rpgCharacters; setRpgCharacters(nextData.rpgCharacters)
-    comicPagesRef.current = nextData.comicPages; setComicPages(nextData.comicPages)
-    comicPanelsRef.current = nextData.comicPanels; setComicPanels(nextData.comicPanels)
-    activeMapByNovelRef.current = nextData.activeMapByNovel; setActiveMapByNovel(nextData.activeMapByNovel)
-    activeNovelIdRef.current = nextData.activeNovelId; setActiveNovelId(nextData.activeNovelId)
-    removedSceneIds.forEach(sceneId => {
-      debouncedSaveScene.cancel(sceneId)
-      knownSceneContentIdsRef.current.delete(sceneId)
-      lastWrittenSceneContentByIdRef.current.delete(sceneId)
-    })
-    markCloudNovelDeleted(id)
-    // A restored or merged project may still reference the same object paths.
-    // Only remove objects that disappeared from the complete retained snapshot.
-    cleanupUnreferencedMedia(mediaUrls, nextData)
-    if (nextData.activeNovelId == null) setWritingSceneId(null)
-    setSelectedCharacterId(null)
-    setSelectedLocationId(null)
-    setSelectedLoreEntryId(null)
-    setSelectedIdeaEntryId(null)
-    setSelectedSceneId(null)
-    return true
+        try {
+          await replaceProjectStorageAtomically(nextData, { ownerId: userId })
+          clearLocalWriteFailed('nf_projectReplacement')
+        } catch (error) {
+          markLocalWriteFailed('nf_projectReplacement')
+          if (!deletion.cloudDeleted) projectDeletionsRef.current.delete(deletionKey)
+          throw error
+        }
+
+        if (activeUserRef.current !== userId) return false
+        if (snapshotRefs.every((ref, index) => ref.current === sourceValues[index])) break
+      }
+
+      if (activeUserRef.current !== userId) return false
+
+      novelsRef.current = nextData.novels; setNovels(nextData.novels)
+      charactersRef.current = nextData.characters; setCharacters(nextData.characters)
+      factionsRef.current = nextData.factions; setFactions(nextData.factions)
+      locationsRef.current = nextData.locations; setLocations(nextData.locations)
+      timelineRef.current = nextData.timeline; setTimeline(nextData.timeline)
+      worldHistoryRef.current = nextData.worldHistory; setWorldHistory(nextData.worldHistory)
+      erasRef.current = nextData.eras; setEras(nextData.eras)
+      plotThreadsRef.current = nextData.plotThreads; setPlotThreads(nextData.plotThreads)
+      actsRef.current = nextData.acts; setActs(nextData.acts)
+      chaptersRef.current = nextData.chapters; setChapters(nextData.chapters)
+      scenesRef.current = nextData.scenes; setScenes(nextData.scenes)
+      loreEntriesRef.current = nextData.loreEntries; setLoreEntries(nextData.loreEntries)
+      ideaEntriesRef.current = nextData.ideaEntries; setIdeaEntries(nextData.ideaEntries)
+      mapsRef.current = nextData.maps; setMaps(nextData.maps)
+      whiteboardsRef.current = nextData.whiteboards; setWhiteboards(nextData.whiteboards)
+      seriesRef.current = nextData.series; setSeries(nextData.series)
+      storyScheduleRef.current = nextData.storySchedule; setStorySchedule(nextData.storySchedule)
+      rpgCharactersRef.current = nextData.rpgCharacters; setRpgCharacters(nextData.rpgCharacters)
+      comicPagesRef.current = nextData.comicPages; setComicPages(nextData.comicPages)
+      comicPanelsRef.current = nextData.comicPanels; setComicPanels(nextData.comicPanels)
+      activeMapByNovelRef.current = nextData.activeMapByNovel; setActiveMapByNovel(nextData.activeMapByNovel)
+      activeNovelIdRef.current = nextData.activeNovelId; setActiveNovelId(nextData.activeNovelId)
+      removedSceneIds.forEach(sceneId => {
+        debouncedSaveScene.cancel(sceneId)
+        knownSceneContentIdsRef.current.delete(sceneId)
+        lastWrittenSceneContentByIdRef.current.delete(sceneId)
+      })
+      markCloudNovelDeleted(id)
+      // A restored or merged project may still reference the same object paths.
+      // Only remove objects that disappeared from the complete retained snapshot.
+      cleanupUnreferencedMedia(mediaUrls, nextData)
+      if (nextData.activeNovelId == null) setWritingSceneId(null)
+      setSelectedCharacterId(null)
+      setSelectedLocationId(null)
+      setSelectedLoreEntryId(null)
+      setSelectedIdeaEntryId(null)
+      setSelectedSceneId(null)
+      return true
+    } finally {
+      deletion.pending = false
+      if (activeUserRef.current !== userId && !deletion.cloudDeleted) projectDeletionsRef.current.delete(deletionKey)
+    }
   }
 
   const importProjectFromData = (data) => {
@@ -4619,7 +4764,7 @@ export function useStore(userId = null, options = {}) {
       coverPhoto: project.coverPhoto || lastEmberDemoProject.project.coverPhoto,
       bannerImage: project.bannerImage || lastEmberDemoProject.project.bannerImage,
     }
-  }, [userId, commitLocal, canSyncCloud, trackSync])
+  }, [userId, commitLocal, canSyncCloud, trackSync, upsertItems])
 
   const ensureSampleProject = useCallback(() => {
     const key = sampleProjectSeedKey(userId)
@@ -4672,7 +4817,7 @@ export function useStore(userId = null, options = {}) {
       ])).catch(console.error)
     }
     return sample.project
-  }, [userId, canSyncCloud, commitLocal, trackSync])
+  }, [userId, canSyncCloud, commitLocal, trackSync, upsertItems])
 
   // Per-project read-only: free tier users can only edit their chosen project
   const readOnly = globalReadOnly || (

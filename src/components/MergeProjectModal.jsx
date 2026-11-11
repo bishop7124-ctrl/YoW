@@ -151,6 +151,7 @@ export default function MergeProjectModal({ store, project, onClose, onDone }) {
                     </select>
                     <p style={{ margin: '6px 0 0', fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.4 }}>
                       Adds the selected project's content into "{project.title || 'this project'}" alongside what's already there — nothing existing in either project is replaced or removed, and the source project is left untouched. Running this more than once will create duplicates rather than merge them.
+                      {' '}Whiteboards are not merged. Links to sections you leave out are cleared in the imported copies.
                     </p>
                   </div>
 
