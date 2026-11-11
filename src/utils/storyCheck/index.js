@@ -25,6 +25,7 @@ export function runStoryCheck(data = {}, settings = {}) {
     acts: list(data.acts),
     chapters: list(data.chapters),
     scenes: list(data.scenes),
+    plotThreads: list(data.plotThreads),
   }
   const merged = { ...DEFAULT_SETTINGS, ...settings }
   const muted = new Set(list(settings.mutedRules))

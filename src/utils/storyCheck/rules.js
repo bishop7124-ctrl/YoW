@@ -12,8 +12,14 @@
 
 import { getTimelineYear, parseTimelineYear } from '../timelineYear.js'
 import { getSceneLinks, sceneStoryYear } from '../sceneLinks.js'
+import { getSceneThreadLinks } from '../plotThreads.js'
 
-export const DEFAULT_SETTINGS = { minParentGap: 12 }
+export const DEFAULT_SETTINGS = { minParentGap: 12, maxThreadGap: 12 }
+
+// Plot-thread checks (roadmap B3). Named so they are easy to tune after real use.
+export const THREAD_ENDING_MIN_SCENES = 8 // fewer scenes than this and "the end of the manuscript" is not meaningful
+export const THREAD_ENDING_FRACTION = 0.1 // the closing stretch is at least this share of the scenes...
+export const THREAD_ENDING_CHAPTERS = 3 // ...or the scenes of the last this-many chapters, whichever is more
 
 const str = value => (value == null ? '' : String(value))
 const hasText = value => str(value).trim() !== ''
@@ -345,6 +351,108 @@ export function ruleSceneOrderVsChronology({ acts = [], chapters = [], scenes = 
   return out
 }
 
+const threadEvidence = (thread, value) => ({
+  label: label(thread, 'Untitled thread'), recordType: 'thread', recordId: thread.id, value,
+})
+
+// Each live thread with where it appears, in manuscript order. Dropped threads are left out of every thread rule:
+// the writer has said they are not part of the story.
+function threadAppearances({ plotThreads = [], acts = [], chapters = [], scenes = [] }) {
+  const ordered = orderedScenes({ acts, chapters, scenes })
+  const appearances = new Map(plotThreads.filter(thread => thread?.id && thread.status !== 'dropped').map(thread => [thread.id, []]))
+  ordered.forEach((scene, index) => {
+    getSceneThreadLinks(scene).forEach(link => { appearances.get(link.threadId)?.push({ scene, index, role: link.role }) })
+  })
+  return { ordered, appearances, threads: plotThreads.filter(thread => appearances.has(thread.id)) }
+}
+
+// R13 — a payoff with no set-up before it, and a thread marked resolved that never pays off.
+export function rulePlotThreadPayoff(input) {
+  const { appearances, threads } = threadAppearances(input)
+  const out = []
+  threads.forEach(thread => {
+    const found = appearances.get(thread.id)
+    const firstPayoff = found.find(item => item.role === 'payoff')
+    if (firstPayoff && !found.some(item => item.index < firstPayoff.index && (item.role === 'setup' || item.role === 'development'))) {
+      out.push(finding({
+        ruleId: 'R13', kind: 'possible', title: 'Pays off a thread that was never set up',
+        explanation: `${label(firstPayoff.scene, 'A scene')} pays off "${label(thread, 'a thread')}", but no earlier scene sets it up or develops it. If the set-up is in the text but not marked, attach the thread to that scene.`,
+        evidence: [threadEvidence(thread, 'payoff first'), sceneEvidence(firstPayoff.scene, 'pays off')],
+        values: ['no-setup', firstPayoff.scene.id],
+      }))
+    }
+    if (thread.status === 'resolved' && found.length > 0 && !firstPayoff) {
+      out.push(finding({
+        ruleId: 'R13', kind: 'possible', title: 'Marked resolved, but no scene pays it off',
+        explanation: `"${label(thread, 'A thread')}" is marked resolved, but none of its ${found.length} scene${found.length === 1 ? '' : 's'} is marked as paying it off.`,
+        evidence: [threadEvidence(thread, 'resolved'), ...found.slice(0, 5).map(item => sceneEvidence(item.scene, item.role))],
+        values: ['no-payoff'],
+      }))
+    }
+  })
+  return out
+}
+
+// R14 — an open thread that does not reach the closing stretch of the manuscript.
+export function rulePlotThreadOpenAtEnd(input) {
+  const { ordered, appearances, threads } = threadAppearances(input)
+  const total = ordered.length
+  if (total < THREAD_ENDING_MIN_SCENES) return []
+  const byChapter = new Map()
+  ordered.forEach((scene, index) => { if (!byChapter.has(scene.chapterId)) byChapter.set(scene.chapterId, index) })
+  const lastChapterStarts = [...byChapter.values()].sort((a, b) => a - b).slice(-THREAD_ENDING_CHAPTERS)
+  const tailStart = Math.min(lastChapterStarts[0] ?? total, total - Math.ceil(total * THREAD_ENDING_FRACTION))
+  const out = []
+  threads.forEach(thread => {
+    if (thread.status !== 'open') return
+    const found = appearances.get(thread.id)
+    if (!found.length) return
+    const last = found[found.length - 1]
+    if (last.index >= tailStart) return
+    out.push(finding({
+      ruleId: 'R14', kind: 'info', title: 'Open thread is absent from the end of the manuscript',
+      explanation: `"${label(thread, 'A thread')}" is still open, but its last scene is ${label(last.scene, 'a scene')}, before the closing stretch of the manuscript. If it is meant to end earlier, mark it resolved; if it runs to the end, attach it to a later scene.`,
+      evidence: [threadEvidence(thread, 'open'), sceneEvidence(last.scene, 'last appearance')],
+      values: ['open-at-end', last.scene.id],
+    }))
+  })
+  return out
+}
+
+// R15 — a long stretch of scenes with no sign of a thread. Only the longest gap per thread is reported.
+export function rulePlotThreadGap(input, settings = DEFAULT_SETTINGS) {
+  const maxGap = Number.isFinite(Number(settings.maxThreadGap)) ? Number(settings.maxThreadGap) : DEFAULT_SETTINGS.maxThreadGap
+  const { appearances, threads } = threadAppearances(input)
+  const out = []
+  threads.forEach(thread => {
+    const found = appearances.get(thread.id)
+    let worst = null
+    for (let i = 1; i < found.length; i += 1) {
+      const between = found[i].index - found[i - 1].index - 1
+      if (between > maxGap && (!worst || between > worst.between)) worst = { between, from: found[i - 1], to: found[i] }
+    }
+    if (!worst) return
+    out.push(finding({
+      ruleId: 'R15', kind: 'info', title: 'Long gap in a plot thread',
+      explanation: `"${label(thread, 'A thread')}" does not appear for ${worst.between} scenes between ${label(worst.from.scene, 'a scene')} and ${label(worst.to.scene, 'a scene')}. Long gaps can be intended; a reminder scene is one way to keep the reader with it.`,
+      evidence: [threadEvidence(thread, `${worst.between} scenes`), sceneEvidence(worst.from.scene, 'before the gap'), sceneEvidence(worst.to.scene, 'after the gap')],
+      values: ['gap', worst.from.scene.id, worst.to.scene.id],
+    }))
+  })
+  return out
+}
+
+// R16 — a thread nothing is attached to.
+export function rulePlotThreadUnused(input) {
+  const { appearances, threads } = threadAppearances(input)
+  return threads.filter(thread => appearances.get(thread.id).length === 0).map(thread => finding({
+    ruleId: 'R16', kind: 'info', title: 'Plot thread has no scenes',
+    explanation: `"${label(thread, 'A thread')}" is not attached to any scene yet.`,
+    evidence: [threadEvidence(thread, 'no scenes')],
+    values: ['unused'],
+  }))
+}
+
 // Info — observations only.
 export function ruleObservations({ timeline, eras }) {
   const out = []
@@ -400,5 +508,9 @@ export const RULES = [
   { id: 'R8', name: 'Broken links', run: ruleDanglingReferences },
   { id: 'R9', name: 'Characters in scenes outside their lifetime', run: ruleCharacterInSceneOutsideLifetime },
   { id: 'R10', name: 'Scene order against the story timeline', run: ruleSceneOrderVsChronology },
+  { id: 'R13', name: 'Plot thread payoff and set-up', run: rulePlotThreadPayoff },
+  { id: 'R14', name: 'Open plot threads at the end', run: rulePlotThreadOpenAtEnd },
+  { id: 'R15', name: 'Long gaps in a plot thread', run: rulePlotThreadGap },
+  { id: 'R16', name: 'Plot threads with no scenes', run: rulePlotThreadUnused },
   { id: 'I', name: 'Observations', run: ruleObservations },
 ]

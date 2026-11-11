@@ -225,3 +225,69 @@ describe('acceptance', () => {
     })
   })
 })
+
+describe('R13-R16 plot thread checks', () => {
+  const acts = [{ id: 'a1', order: 0 }]
+  // Twenty scenes, two per chapter, in ten chapters.
+  const chapters = Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, actId: 'a1', order: i }))
+  const baseScenes = () => Array.from({ length: 20 }, (_, i) => ({ id: `s${i}`, title: `Scene ${i}`, chapterId: `c${Math.floor(i / 2)}`, order: i % 2 }))
+  const link = (scenes, sceneIndex, threadId, role) => { scenes[sceneIndex] = { ...scenes[sceneIndex], threadLinks: [...(scenes[sceneIndex].threadLinks || []), { threadId, role }] } }
+  const thread = (id, extra = {}) => ({ id, name: `Thread ${id}`, status: 'open', ...extra })
+  const run = (plotThreads, scenes, rule, settings) => ids(runStoryCheck({ acts, chapters, scenes, plotThreads }, settings), rule)
+
+  it('R13 flags a payoff with no earlier set-up or development, and accepts one with it', () => {
+    const bad = baseScenes(); link(bad, 5, 't', 'payoff'); link(bad, 9, 't', 'setup')
+    const hits = run([thread('t')], bad, 'R13')
+    expect(hits).toHaveLength(1)
+    expect(hits[0].kind).toBe('possible')
+    expect(hits[0].evidence.map(e => e.recordType)).toEqual(['thread', 'scene'])
+    const good = baseScenes(); link(good, 2, 't', 'development'); link(good, 5, 't', 'payoff')
+    expect(run([thread('t')], good, 'R13')).toEqual([])
+  })
+  it('R13 flags a resolved thread with no payoff, but not an open one or one with a payoff', () => {
+    const s = baseScenes(); link(s, 1, 't', 'setup'); link(s, 3, 't', 'development')
+    expect(run([thread('t', { status: 'resolved' })], s, 'R13')).toHaveLength(1)
+    expect(run([thread('t', { status: 'open' })], s, 'R13')).toEqual([])
+    link(s, 4, 't', 'payoff')
+    expect(run([thread('t', { status: 'resolved' })], s, 'R13')).toEqual([])
+  })
+  it('R14 flags an open thread that stops before the closing stretch, not a resolved, dropped or ending one', () => {
+    const early = baseScenes(); link(early, 1, 't', 'setup'); link(early, 4, 't', 'development')
+    const hits = run([thread('t')], early, 'R14')
+    expect(hits).toHaveLength(1)
+    expect(hits[0].kind).toBe('info')
+    expect(run([thread('t', { status: 'resolved' })], early, 'R14')).toEqual([])
+    expect(run([thread('t', { status: 'dropped' })], early, 'R14')).toEqual([])
+    const reaches = baseScenes(); link(reaches, 1, 't', 'setup'); link(reaches, 17, 't', 'development') // chapter 8 of 10: inside the last three chapters
+    expect(run([thread('t')], reaches, 'R14')).toEqual([])
+  })
+  it('R14 stays quiet for a short manuscript', () => {
+    const few = baseScenes().slice(0, 6); link(few, 0, 't', 'setup')
+    expect(run([thread('t')], few, 'R14')).toEqual([])
+  })
+  it('R15 reports only the longest gap, using the setting, and ignores gaps of exactly the limit', () => {
+    const s = baseScenes(); link(s, 0, 't', 'setup'); link(s, 4, 't', 'development'); link(s, 19, 't', 'payoff') // gaps of 3 and 14 scenes
+    const hits = run([thread('t')], s, 'R15')
+    expect(hits).toHaveLength(1)
+    expect(hits[0].evidence.map(e => e.value)).toEqual(['14 scenes', 'before the gap', 'after the gap'])
+    expect(run([thread('t')], s, 'R15', { maxThreadGap: 14 })).toEqual([])
+    expect(run([thread('t')], s, 'R15', { maxThreadGap: 3 })).toHaveLength(1)
+  })
+  it('R16 flags a live thread with no scenes, and not a dropped one', () => {
+    expect(run([thread('t')], baseScenes(), 'R16')).toHaveLength(1)
+    expect(run([thread('t', { status: 'dropped' })], baseScenes(), 'R16')).toEqual([])
+    const s = baseScenes(); link(s, 0, 't', 'setup')
+    expect(run([thread('t')], s, 'R16')).toEqual([])
+  })
+  it('does nothing without threads, ignores links to missing threads, and a dismissal sticks', () => {
+    const s = baseScenes(); link(s, 0, 'ghost', 'payoff')
+    expect(runStoryCheck({ acts, chapters, scenes: s }).findings.filter(f => /^R1[3-6]$/.test(f.ruleId))).toEqual([])
+    expect(runStoryCheck({ acts, chapters, scenes: s, plotThreads: [] }).findings.filter(f => /^R1[3-6]$/.test(f.ruleId))).toEqual([])
+    const data = { acts, chapters, scenes: baseScenes(), plotThreads: [thread('t')] }
+    const first = runStoryCheck(data).findings.find(f => f.ruleId === 'R16')
+    expect(runStoryCheck(data, { dismissed: { [first.fingerprint]: true } }).findings.some(f => f.ruleId === 'R16')).toBe(false)
+  })
+  it('can be muted like any other rule', () => {
+    expect(runStoryCheck({ acts, chapters, scenes: baseScenes(), plotThreads: [thread('t')] }, { mutedRules: ['R16'] }).findings.some(f => f.ruleId === 'R16')).toBe(false)
+  })
+})

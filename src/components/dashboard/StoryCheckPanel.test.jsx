@@ -47,6 +47,16 @@ describe('StoryCheckPanel', () => {
     expect(screen.getByText(/works without any AI/i)).toBeTruthy()
   })
 
+  it('shows plot thread findings when threads exist, and opens the thread in the Outline', () => {
+    flag.on = true
+    const store = { ...makeStore(), plotThreads: [{ id: 't1', novelId: 'p1', name: 'The heir', status: 'open' }] }
+    store.activeProjectStats = { ...store.activeProjectStats, acts: [], chapters: [], scenes: [] }
+    render(<StoryCheckPanel store={store} />)
+    expect(screen.getByText('Plot thread has no scenes')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /The heir/ }))
+    expect(navigateToFindingRef).toHaveBeenCalledWith(store, { type: 'thread', id: 't1' })
+  })
+
   it('opens the record behind a finding', () => {
     flag.on = true
     const store = makeStore()

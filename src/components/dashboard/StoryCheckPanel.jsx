@@ -11,7 +11,7 @@ const KIND_HELP = {
   missing: 'A check could not run because a date or value is absent or unreadable.',
   info: 'Observations about the data. Not problems.',
 }
-const OPENABLE = new Set(['character', 'timeline', 'scene'])
+const OPENABLE = new Set(['character', 'timeline', 'scene', 'thread'])
 const EMPTY_LIST = []
 const nowMs = () => Date.now()
 
@@ -20,6 +20,8 @@ const nowMs = () => Date.now()
 // Hidden unless the `story_check` flag is on for the signed-in user.
 export default function StoryCheckPanel({ store }) {
   const enabled = useFeatureFlag('story_check')
+  // Plot-thread checks (R13 to R16) only see threads while the `plot_threads` flag is on.
+  const threadsEnabled = useFeatureFlag('plot_threads')
   const project = store?.activeProjectStats?.project
   const stats = store?.activeProjectStats
   const settings = project?.storyCheck
@@ -30,6 +32,7 @@ export default function StoryCheckPanel({ store }) {
   const mutedRules = settings?.mutedRules || EMPTY_LIST
   const minParentGap = settings?.minParentGap
   const eras = store?.eras
+  const plotThreads = threadsEnabled ? store?.plotThreads : undefined
   const projectId = project?.id
   const result = useMemo(() => {
     if (!enabled || !stats) return null
@@ -42,10 +45,11 @@ export default function StoryCheckPanel({ store }) {
         acts: stats.acts,
         chapters: stats.chapters,
         scenes: stats.scenes,
+        plotThreads,
       },
       { dismissed, mutedRules, minParentGap },
     )
-  }, [enabled, stats, eras, projectId, dismissed, mutedRules, minParentGap])
+  }, [enabled, stats, eras, projectId, plotThreads, dismissed, mutedRules, minParentGap])
 
   if (!enabled || !project || !result) return null
 

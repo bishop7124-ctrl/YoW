@@ -54,6 +54,10 @@ export function navigateToFindingRef(store, ref) {
   } else if (ref.type === 'scene') {
     store.setSelectedSceneId(ref.id)
     window.dispatchEvent(new CustomEvent('switch-writing'))
+  } else if (ref.type === 'thread') {
+    // Plot threads live in the Outline room's Threads view; tell it which view to open on arrival.
+    try { sessionStorage.setItem('yow_outline_view', 'threads') } catch { /* private mode: it opens on the Outline instead */ }
+    window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'outline' } }))
   } else if (ref.type === 'chapter') {
     const firstScene = (store.scenes || []).find(s => s.chapterId === ref.id)
     if (firstScene) store.setSelectedSceneId(firstScene.id)

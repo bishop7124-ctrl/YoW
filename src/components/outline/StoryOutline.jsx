@@ -225,7 +225,14 @@ function OutlineProject({ store }) {
   const [actionError, setActionError] = useState('')
   // Threads view (Release B): only offered while the `plot_threads` flag is on for this account.
   const threadsEnabled = useFeatureFlag('plot_threads')
-  const [view, setView] = useState('outline')
+  const [view, setView] = useState(() => {
+    // A Story Check finding about a thread opens the Outline on its Threads view (one-shot hint).
+    try {
+      const wanted = sessionStorage.getItem('yow_outline_view')
+      if (wanted) sessionStorage.removeItem('yow_outline_view')
+      return wanted === 'threads' ? 'threads' : 'outline'
+    } catch { return 'outline' }
+  })
   const showThreads = threadsEnabled && view === 'threads'
   const labels = getProjectType(activeNovel?.type).structure
   const indicators = getStoryEventIndicators(activeNovel?.type)

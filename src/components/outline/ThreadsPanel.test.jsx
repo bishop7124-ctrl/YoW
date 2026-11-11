@@ -151,6 +151,15 @@ describe('ThreadsPanel grid', () => {
 
 describe('StoryOutline Threads view', () => {
   const outlineStore = () => makeStore({ acts: [{ id: 'a1', title: 'Act 1', order: 0 }], moveAct: vi.fn(), addAct: vi.fn() })
+  it('opens on the Threads view once when a Story Check finding asked for it', () => {
+    sessionStorage.setItem('yow_outline_view', 'threads')
+    const first = render(<StoryOutline store={outlineStore()} />)
+    expect(screen.getByTestId('threads-panel')).toBeTruthy()
+    expect(sessionStorage.getItem('yow_outline_view')).toBeNull() // one-shot
+    first.unmount()
+    render(<StoryOutline store={outlineStore()} />)
+    expect(screen.queryByTestId('threads-panel')).toBeNull()
+  })
   it('offers the Threads view only while the flag is on', () => {
     flag.on = false
     const { unmount } = render(<StoryOutline store={outlineStore()} />)
