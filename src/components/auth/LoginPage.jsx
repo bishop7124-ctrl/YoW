@@ -65,6 +65,21 @@ const FEATURES = [
   },
 ]
 
+const REFERRAL_SOURCES = [
+  ['web_search', 'Web search (Google, Bing, etc.)'],
+  ['tiktok', 'TikTok'],
+  ['instagram', 'Instagram'],
+  ['alternativeto', 'AlternativeTo'],
+  ['reddit', 'Reddit'],
+  ['youtube', 'YouTube'],
+  ['facebook', 'Facebook'],
+  ['x_twitter', 'X / Twitter'],
+  ['friend', 'Friend or word of mouth'],
+  ['writing_community', 'Writing community or forum'],
+  ['ai_assistant', 'AI assistant (ChatGPT, Claude, etc.)'],
+  ['other', 'Other'],
+]
+
 function HeroIllustration() {
   return (
     <div className="auth-hero-logo" aria-hidden="true">
@@ -155,6 +170,7 @@ export default function LoginPage({
   const [email, setEmail] = useState(initialEmail || (import.meta.env.DEV ? (import.meta.env.VITE_DEV_EMAIL ?? '') : ''))
   const [password, setPassword] = useState(import.meta.env.DEV ? (import.meta.env.VITE_DEV_PASSWORD ?? '') : '')
   const [error, setError] = useState('')
+  const [referralSource, setReferralSource] = useState('')
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [resent, setResent] = useState(false)
@@ -274,7 +290,7 @@ export default function LoginPage({
           )
         }
       } else {
-        const { data, error: err } = await signUp(email, password)
+        const { data, error: err } = await signUp(email, password, referralSource)
         if (err) {
           trackEvent('signup_error', {
             reason: /already registered|already.*exists|user.*exists|email.*taken/i.test(err.message) ? 'existing_email' : 'auth_error',
@@ -598,6 +614,18 @@ export default function LoginPage({
                     />
                     {mode === 'signup' && (
                       <PasswordRequirements id="signup-password-requirements" value={password} />
+                    )}
+                    {mode === 'signup' && (
+                      <select
+                        aria-label="How did you hear about us? (optional)"
+                        value={referralSource}
+                        onChange={e => setReferralSource(e.target.value)}
+                        className="field w-full px-4 py-3 text-base"
+                        style={{ color: referralSource ? undefined : 'var(--text-muted)' }}
+                      >
+                        <option value="">How did you hear about us? (optional)</option>
+                        {REFERRAL_SOURCES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
                     )}
 
                     {error && (
