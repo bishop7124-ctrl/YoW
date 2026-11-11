@@ -138,6 +138,128 @@ export const MANUSCRIPT_TEMPLATES = [
   },
 
   {
+    id: 'seven-point',
+    name: 'Seven-Point Structure',
+    genre: 'General Fiction',
+    projectTypes: ['novel'],
+    description: "Dan Wells' seven-point plan: work backwards from the resolution so every turn has a purpose. Compact, and good for plotting before you write.",
+    targetWords: 80000,
+    acts: [
+      {
+        title: 'Act I — Setup',
+        guidance: 'Open at the opposite end of the journey from where you will finish, then give the hero a reason to move.',
+        chapters: [
+          { title: 'Hook', guidance: 'Show the hero at the start, as far from the resolution as possible. Establish who they are and what is wrong.' },
+          { title: 'Plot Turn 1', guidance: 'The event that pulls the hero out of the status quo and into the conflict. The story really starts here.' },
+        ],
+      },
+      {
+        title: 'Act II — Pressure',
+        guidance: 'The hero reacts, then acts. Pressure from the antagonist forces the change.',
+        chapters: [
+          { title: 'Pinch 1', guidance: 'Apply pressure: the antagonist or circumstances make the hero\'s situation worse and show what they are up against.' },
+          { title: 'Midpoint', guidance: 'The hero stops reacting and starts acting. A change of understanding that sets up the second half.' },
+          { title: 'Pinch 2', guidance: 'The pressure returns harder. The hero loses something that seemed to be the way out.' },
+        ],
+      },
+      {
+        title: 'Act III — Resolution',
+        guidance: 'The hero gets the last piece they need and faces the end.',
+        chapters: [
+          { title: 'Plot Turn 2', guidance: 'The hero acquires the final piece of information, ability or resolve needed to win.' },
+          { title: 'Resolution', guidance: 'The conflict is settled. Mirror the Hook so the change in the hero is visible.' },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'story-circle',
+    name: 'Story Circle',
+    genre: 'General Fiction',
+    projectTypes: ['novel'],
+    description: "Dan Harmon's eight-step circle: a character in a comfort zone wants something, goes into the unknown, pays a price, and comes back changed. Works well for character-driven and episodic stories.",
+    targetWords: 75000,
+    acts: [
+      {
+        title: 'Order — The familiar world',
+        guidance: 'A character in a situation they know, who wants something.',
+        chapters: [
+          { title: 'You', guidance: 'Show the character in their zone of comfort. Who are they before the story changes them?' },
+          { title: 'Need', guidance: 'But they want something. A lack or desire that disturbs the comfort.' },
+        ],
+      },
+      {
+        title: 'Chaos — The unfamiliar world',
+        guidance: 'They enter a situation that is new, adapt to it, and get what they came for at a cost.',
+        chapters: [
+          { title: 'Go', guidance: 'They enter an unfamiliar situation and cross a threshold they cannot easily uncross.' },
+          { title: 'Search', guidance: 'They adapt to it, meeting allies and trials, learning the new rules.' },
+          { title: 'Find', guidance: 'They get what they wanted, or what they thought they wanted.' },
+          { title: 'Take', guidance: 'They pay a heavy price for it. The cost is what changes them.' },
+        ],
+      },
+      {
+        title: 'Order restored — Return and change',
+        guidance: 'They go back to the familiar world, and it is not the same because they are not.',
+        chapters: [
+          { title: 'Return', guidance: 'They go back to where they started, carrying what they took.' },
+          { title: 'Change', guidance: 'They have changed, and so has their relationship to the world they left. Show the difference.' },
+        ],
+      },
+    ],
+  },
+
+  {
+    id: 'five-act',
+    name: 'Five-Act Structure',
+    genre: 'General Fiction',
+    projectTypes: ['novel'],
+    description: "The classical five-part arc used in drama and many novels: exposition, rising action, climax, falling action, resolution. A good fit for tragedies and stories built around one decisive turn.",
+    targetWords: 90000,
+    acts: [
+      {
+        title: 'Act I — Exposition',
+        guidance: 'Introduce the world, the people and the situation, and the spark that sets the story moving.',
+        chapters: [
+          { title: 'The situation', guidance: 'Who and where we are, and what is at stake.' },
+          { title: 'The inciting incident', guidance: 'The event that sets the central conflict in motion.' },
+        ],
+      },
+      {
+        title: 'Act II — Rising action',
+        guidance: 'Complications build and the stakes climb.',
+        chapters: [
+          { title: 'Complications', guidance: 'Obstacles multiply. Early plans fail.' },
+          { title: 'Rising stakes', guidance: 'What the hero risks grows, and the way back closes.' },
+        ],
+      },
+      {
+        title: 'Act III — Climax',
+        guidance: 'The turning point where the conflict reaches its peak and the outcome is decided.',
+        chapters: [
+          { title: 'The turning point', guidance: 'The decisive moment. Fortunes turn for good or ill.' },
+        ],
+      },
+      {
+        title: 'Act IV — Falling action',
+        guidance: 'The consequences of the turning point play out.',
+        chapters: [
+          { title: 'Consequences', guidance: 'Show what the turning point cost and changed.' },
+          { title: 'Final suspense', guidance: 'One last doubt about how it ends, before it ends.' },
+        ],
+      },
+      {
+        title: 'Act V — Resolution',
+        guidance: 'Loose ends are tied and the new normal is shown.',
+        chapters: [
+          { title: 'Resolution', guidance: 'The conflict is settled and the world, and the people in it, are shown after the change.' },
+        ],
+      },
+    ],
+  },
+
+  {
     id: 'romantasy',
     name: 'Romantasy Structure',
     genre: 'Romantasy / Fantasy Romance',

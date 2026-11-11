@@ -10,6 +10,7 @@ import {
 import ParentMoveSelect from '../shared/ParentMoveSelect.jsx'
 import OutlineItemEditor from './OutlineItemEditor.jsx'
 import ThreadsPanel from './ThreadsPanel.jsx'
+import StructurePanel from './StructurePanel.jsx'
 import { useFeatureFlag } from '../../utils/useFeatureFlag'
 
 const ChevronIcon = ({ open }) => (
@@ -234,6 +235,7 @@ function OutlineProject({ store }) {
     } catch { return 'outline' }
   })
   const showThreads = threadsEnabled && view === 'threads'
+  const showStructure = threadsEnabled && view === 'structure'
   const labels = getProjectType(activeNovel?.type).structure
   const indicators = getStoryEventIndicators(activeNovel?.type)
   const model = useMemo(() => buildOutlineModel({ acts, chapters, scenes }), [acts, chapters, scenes])
@@ -314,12 +316,13 @@ function OutlineProject({ store }) {
 
     {threadsEnabled && (
       <div className="outline-viewswitch" role="tablist" aria-label="Outline views">
-        <button type="button" role="tab" aria-selected={!showThreads} className={!showThreads ? 'is-active' : ''} onClick={() => setView('outline')}>Outline</button>
+        <button type="button" role="tab" aria-selected={!showThreads && !showStructure} className={!showThreads && !showStructure ? 'is-active' : ''} onClick={() => setView('outline')}>Outline</button>
         <button type="button" role="tab" aria-selected={showThreads} className={showThreads ? 'is-active' : ''} onClick={() => setView('threads')}>Threads</button>
+        <button type="button" role="tab" aria-selected={showStructure} className={showStructure ? 'is-active' : ''} onClick={() => setView('structure')}>Structure</button>
       </div>
     )}
 
-    {showThreads ? <div className="outline-workspace"><ThreadsPanel store={store} /></div> : <div className="outline-workspace">
+    {showThreads ? <div className="outline-workspace"><ThreadsPanel store={store} /></div> : showStructure ? <div className="outline-workspace"><StructurePanel store={store} /></div> : <div className="outline-workspace">
       {actionError && <div role="alert" className="mx-auto mb-3 flex max-w-3xl items-center justify-between gap-3 rounded border border-red-400/40 bg-red-400/10 px-3 py-2 text-sm"><span>{actionError}</span><button type="button" aria-label="Dismiss error" onClick={() => setActionError('')}>×</button></div>}
       {!model.totals.acts && !hasRecovery ? <div className="empty-state mx-auto mt-12 max-w-lg">
         <p className="text-sm text-[var(--text-muted)]">No {labels.level1.toLowerCase()}s yet.</p>
