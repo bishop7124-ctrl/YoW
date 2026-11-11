@@ -24998,3 +24998,42 @@ body {
 .ms-thread-links button { background: none; border: 0; color: var(--text-muted); cursor: pointer; min-width: 28px; min-height: 28px; }
 
 @media (max-width: 520px) { .thr-row { grid-template-columns: 1fr; } }
+
+/* ── Threads grid (Release B, B2) ───────────────────────────────────────────── */
+.thr-panel.is-wide { max-width: 1180px; }
+.thr-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; justify-self: start; }
+.thr-seg button { background: none; border: 0; padding: 6px 14px; min-height: 32px; color: var(--text-muted); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.thr-seg button.is-active { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text-main); }
+.thr-grid-block { display: grid; gap: 12px; }
+.thr-grid-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.thr-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-muted); }
+.thr-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.thr-cell-sample { width: 20px; height: 20px; border-radius: 4px; display: inline-grid; place-items: center; font-size: 10px; font-weight: 800; background: var(--accent); color: var(--button-primary-text, #fff); }
+.thr-cell-sample.is-setup { background: transparent; border: 2px solid var(--accent); color: var(--accent); }
+.thr-cell-sample.is-development { background: color-mix(in srgb, var(--accent) 45%, transparent); color: var(--text-main); }
+.thr-cell-sample.is-mention { background: transparent; border: 1px dashed var(--accent); color: var(--text-muted); }
+.thr-grid-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-nav); }
+.thr-grid { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 12px; }
+.thr-grid th, .thr-grid td { border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent); padding: 0; }
+.thr-grid-corner, .thr-grid-row { position: sticky; left: 0; z-index: 1; background: var(--bg-nav); text-align: left; min-width: 190px; max-width: 240px; padding: 8px 12px !important; border-right: 1px solid var(--border); }
+.thr-grid-row { display: table-cell; }
+.thr-grid-row .thr-dot { margin-right: 8px; vertical-align: middle; }
+.thr-grid-name { font-weight: 700; vertical-align: middle; overflow-wrap: anywhere; }
+.thr-grid-kind { display: block; font-size: 11px; color: var(--text-muted); font-weight: 400; margin-left: 18px; }
+.thr-grid-act { padding: 6px 8px !important; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; text-align: left; border-left: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
+.thr-grid-col { min-width: 34px; width: 34px; height: 26px; font-size: 11px; font-weight: 600; color: var(--text-muted); text-align: center; }
+.thr-grid-cell { min-width: 34px; width: 34px; height: 40px; text-align: center; }
+.thr-cell { --thr-color: var(--accent); width: 28px; height: 28px; border-radius: 6px; display: inline-grid; place-items: center; font-size: 11px; font-weight: 800; cursor: pointer; border: 2px solid var(--thr-color); background: var(--thr-color); color: #111; padding: 0; position: relative; }
+.thr-cell sup { font-size: 8px; position: absolute; top: 1px; right: 2px; }
+.thr-cell.is-setup { background: transparent; color: var(--thr-color); }
+.thr-cell.is-development { background: color-mix(in srgb, var(--thr-color) 45%, transparent); color: var(--text-main); }
+.thr-cell.is-mention { background: transparent; border-style: dashed; border-width: 1px; color: var(--text-muted); }
+.thr-cell:focus-visible { outline: 2px solid var(--text-main); outline-offset: 2px; }
+.thr-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.thr-appear { display: none; gap: 12px; }
+.thr-appear-row ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; font-size: 13px; }
+.thr-appear-name { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+@media (max-width: 900px) {
+  .thr-grid-scroll { display: none; }
+  .thr-appear { display: grid; }
+}

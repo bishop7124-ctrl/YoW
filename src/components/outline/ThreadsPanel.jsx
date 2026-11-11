@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import ThreadsGrid from './ThreadsGrid.jsx'
 import {
   THREAD_KINDS, THREAD_STATUSES, THREAD_COLORS, THREAD_KIND_LABELS, THREAD_STATUS_LABELS, THREAD_ROLE_LABELS,
   MAX_THREAD_NAME, MAX_THREADS_PER_PROJECT, nextThreadColor, threadKindLabel, threadSceneStats,
@@ -109,8 +110,12 @@ export default function ThreadsPanel({ store }) {
   const [editing, setEditing] = useState(null) // null | 'new' | thread id
   const [confirmDelete, setConfirmDelete] = useState(null)
   const [error, setError] = useState('')
+  // The grid is the point of threads once there are some; the list is where they are edited.
+  const [view, setView] = useState('grid')
   const stats = useMemo(() => new Map(plotThreads.map(thread => [thread.id, threadSceneStats(thread.id, scenes)])), [plotThreads, scenes])
   const atLimit = plotThreads.length >= MAX_THREADS_PER_PROJECT
+  const showGrid = plotThreads.length > 0 && view === 'grid' && editing !== 'new'
+  const showList = !showGrid
 
   const create = draft => {
     const made = store.addPlotThread({ ...draft, color: draft.color || nextThreadColor(plotThreads) })
@@ -130,7 +135,7 @@ export default function ThreadsPanel({ store }) {
   }
 
   return (
-    <section className="thr-panel" aria-label="Plot threads" data-testid="threads-panel">
+    <section className={`thr-panel${plotThreads.length > 0 && view === 'grid' ? ' is-wide' : ''}`} aria-label="Plot threads" data-testid="threads-panel">
       <div className="thr-head">
         <div>
           <h2>Plot threads <em className="ms-links-beta">Beta</em></h2>
@@ -140,6 +145,13 @@ export default function ThreadsPanel({ store }) {
           <button type="button" className="btn btn-primary" disabled={atLimit} onClick={() => { setEditing('new'); setConfirmDelete(null) }}>+ New thread</button>
         )}
       </div>
+      {plotThreads.length > 0 && (
+        <div className="thr-seg" role="group" aria-label="Threads view">
+          <button type="button" aria-pressed={view === 'grid'} className={view === 'grid' ? 'is-active' : ''} onClick={() => setView('grid')}>Grid</button>
+          <button type="button" aria-pressed={view === 'list'} className={view === 'list' ? 'is-active' : ''} onClick={() => setView('list')}>List</button>
+        </div>
+      )}
+      {showGrid && <ThreadsGrid store={store} />}
       {atLimit && <p className="thr-note">This project has reached the limit of {MAX_THREADS_PER_PROJECT} threads.</p>}
       {error && <p className="thr-error" role="alert">{error}</p>}
 
@@ -152,44 +164,46 @@ export default function ThreadsPanel({ store }) {
         </div>
       )}
 
-      <ul className="thr-list">
-        {plotThreads.map(thread => {
-          const usage = stats.get(thread.id) || { count: 0, byRole: {} }
-          if (editing === thread.id && !disabled) {
-            return <li key={thread.id}><ThreadEditor thread={thread} characters={characters} onSave={draft => save(thread.id, draft)} onCancel={() => setEditing(null)} /></li>
-          }
-          return (
-            <li key={thread.id} className={`thr-card is-${thread.status}`}>
-              <div className="thr-card-top">
-                <span className="thr-dot" style={thread.color ? { background: thread.color } : undefined} aria-hidden="true" />
-                <strong className="thr-name">{thread.name}</strong>
-                <span className="thr-kind">{threadKindLabel(thread)}</span>
-                <span className={`thr-status is-${thread.status}`}>{THREAD_STATUS_LABELS[thread.status]}</span>
-              </div>
-              {thread.description && <p className="thr-desc">{thread.description}</p>}
-              <p className="thr-usage">
-                {usage.count === 0
-                  ? 'Not attached to any scene yet.'
-                  : `${usage.count} ${usage.count === 1 ? 'scene' : 'scenes'}: ${Object.entries(usage.byRole).filter(([, n]) => n > 0).map(([role, n]) => `${n} ${THREAD_ROLE_LABELS[role].toLowerCase()}`).join(', ')}`}
-              </p>
-              {!disabled && (
-                confirmDelete === thread.id ? (
-                  <div className="thr-confirm" role="group" aria-label={`Delete ${thread.name}?`}>
-                    <span>Delete "{thread.name}"? {usage.count > 0 ? `It will be removed from ${usage.count} ${usage.count === 1 ? 'scene' : 'scenes'}.` : ''}</span>
-                    <button type="button" className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Cancel</button>
-                    <button type="button" className="btn thr-danger" onClick={() => remove(thread.id)}>Delete thread</button>
-                  </div>
-                ) : (
-                  <div className="thr-actions">
-                    <button type="button" className="thr-link" aria-label={`Edit ${thread.name}`} onClick={() => { setEditing(thread.id); setConfirmDelete(null) }}>Edit</button>
-                    <button type="button" className="thr-link" aria-label={`Delete ${thread.name}`} onClick={() => setConfirmDelete(thread.id)}>Delete</button>
-                  </div>
-                )
-              )}
-            </li>
-          )
-        })}
-      </ul>
+      {showList && (
+        <ul className="thr-list">
+          {plotThreads.map(thread => {
+            const usage = stats.get(thread.id) || { count: 0, byRole: {} }
+            if (editing === thread.id && !disabled) {
+              return <li key={thread.id}><ThreadEditor thread={thread} characters={characters} onSave={draft => save(thread.id, draft)} onCancel={() => setEditing(null)} /></li>
+            }
+            return (
+              <li key={thread.id} className={`thr-card is-${thread.status}`}>
+                <div className="thr-card-top">
+                  <span className="thr-dot" style={thread.color ? { background: thread.color } : undefined} aria-hidden="true" />
+                  <strong className="thr-name">{thread.name}</strong>
+                  <span className="thr-kind">{threadKindLabel(thread)}</span>
+                  <span className={`thr-status is-${thread.status}`}>{THREAD_STATUS_LABELS[thread.status]}</span>
+                </div>
+                {thread.description && <p className="thr-desc">{thread.description}</p>}
+                <p className="thr-usage">
+                  {usage.count === 0
+                    ? 'Not attached to any scene yet.'
+                    : `${usage.count} ${usage.count === 1 ? 'scene' : 'scenes'}: ${Object.entries(usage.byRole).filter(([, n]) => n > 0).map(([role, n]) => `${n} ${THREAD_ROLE_LABELS[role].toLowerCase()}`).join(', ')}`}
+                </p>
+                {!disabled && (
+                  confirmDelete === thread.id ? (
+                    <div className="thr-confirm" role="group" aria-label={`Delete ${thread.name}?`}>
+                      <span>Delete "{thread.name}"? {usage.count > 0 ? `It will be removed from ${usage.count} ${usage.count === 1 ? 'scene' : 'scenes'}.` : ''}</span>
+                      <button type="button" className="btn btn-secondary" onClick={() => setConfirmDelete(null)}>Cancel</button>
+                      <button type="button" className="btn thr-danger" onClick={() => remove(thread.id)}>Delete thread</button>
+                    </div>
+                  ) : (
+                    <div className="thr-actions">
+                      <button type="button" className="thr-link" aria-label={`Edit ${thread.name}`} onClick={() => { setEditing(thread.id); setConfirmDelete(null) }}>Edit</button>
+                      <button type="button" className="thr-link" aria-label={`Delete ${thread.name}`} onClick={() => setConfirmDelete(thread.id)}>Delete</button>
+                    </div>
+                  )
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </section>
   )
 }

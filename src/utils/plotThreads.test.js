@@ -3,6 +3,7 @@ import {
   normalizeThread, pickThreadFields, projectThreads, nextThreadOrder, getSceneThreadLinks, setThreadLinkPatch,
   removeThreadLinkPatch, scenesWithoutThreadLinks, remapThreadLinks, mergeThreadLists, MAX_LINKS_PER_SCENE, MAX_THREAD_NAME,
   threadSceneStats, suggestThreadsForScene, dismissThreadSuggestionPatch, threadKindLabel, nextThreadColor, THREAD_COLORS,
+  buildThreadGrid, threadAppearances,
 } from './plotThreads'
 
 describe('normalizeThread', () => {
@@ -135,5 +136,55 @@ describe('labels and colours', () => {
     expect(threadKindLabel({ kind: 'romance' })).toBe('Romance')
     expect(nextThreadColor([])).toBe(THREAD_COLORS[0])
     expect(nextThreadColor(new Array(THREAD_COLORS.length).fill({}))).toBe(THREAD_COLORS[0])
+  })
+})
+
+describe('buildThreadGrid', () => {
+  const outline = {
+    acts: [
+      { act: { id: 'a1', title: 'Act I' }, chapters: [
+        { chapter: { id: 'c1', title: 'One' }, scenes: [{ id: 's1', title: 'Opening' }, { id: 's2', title: 'Gate' }] },
+        { chapter: { id: 'c2', title: 'Two' }, scenes: [{ id: 's3', title: 'Chase' }] },
+      ] },
+      { act: { id: 'a2', title: 'Act II' }, chapters: [{ chapter: { id: 'c3', title: 'Three' }, scenes: [] }] },
+      { act: { id: 'a3', title: 'Empty act' }, chapters: [] },
+    ],
+  }
+  const scenes = [
+    { id: 's1', threadLinks: [{ threadId: 't1', role: 'setup' }, { threadId: 't2', role: 'mention' }] },
+    { id: 's2', threadLinks: [{ threadId: 't1', role: 'payoff' }] },
+    { id: 's3', threadLinks: [{ threadId: 't2', role: 'development' }] },
+  ]
+  const threads = [{ id: 't1', name: 'Heir' }, { id: 't2', name: 'Romance' }, { id: 't3', name: 'Unused' }]
+
+  it('lays out chapters in manuscript order, grouped by act, skipping acts with nothing in them', () => {
+    const grid = buildThreadGrid({ threads, outline, scenes })
+    expect(grid.columns.map(c => c.id)).toEqual(['c1', 'c2', 'c3'])
+    expect(grid.groups).toEqual([{ id: 'a1', label: 'Act I', span: 2 }, { id: 'a2', label: 'Act II', span: 1 }])
+  })
+  it('shows the strongest role in a chapter cell and how many scenes hit it', () => {
+    const grid = buildThreadGrid({ threads, outline, scenes })
+    const heir = grid.rows.find(r => r.thread.id === 't1')
+    expect(heir.cells.map(c => [c.role, c.count])).toEqual([['payoff', 2], [null, 0], [null, 0]]) // setup + payoff in chapter 1: payoff wins
+    expect(heir.total).toBe(2)
+    expect(grid.rows.find(r => r.thread.id === 't3').total).toBe(0)
+  })
+  it('switches to one column per scene', () => {
+    const grid = buildThreadGrid({ threads, outline, scenes, by: 'scene' })
+    expect(grid.columns.map(c => c.id)).toEqual(['s1', 's2', 's3'])
+    expect(grid.rows[0].cells.map(c => c.role)).toEqual(['setup', 'payoff', null])
+    expect(grid.groups).toEqual([{ id: 'a1', label: 'Act I', span: 3 }])
+  })
+  it('ignores links to threads that do not exist and survives junk', () => {
+    expect(buildThreadGrid({ threads: [{ id: 't1' }], outline, scenes: [{ id: 's1', threadLinks: [{ threadId: 'gone', role: 'setup' }] }] }).rows[0].total).toBe(0)
+    expect(buildThreadGrid({})).toEqual({ columns: [], groups: [], rows: [] })
+    expect(buildThreadGrid({ threads: [null, { name: 'no id' }], outline: null, scenes: 'x' }).rows).toEqual([])
+  })
+  it('lists appearances in order for narrow screens', () => {
+    const grid = buildThreadGrid({ threads, outline, scenes })
+    const romance = grid.rows.find(r => r.thread.id === 't2')
+    expect(threadAppearances(romance, grid.columns)).toEqual([
+      { label: 'One', role: 'mention', count: 1, sceneId: 's1' }, { label: 'Two', role: 'development', count: 1, sceneId: 's3' },
+    ])
   })
 })

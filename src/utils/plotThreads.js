@@ -160,3 +160,62 @@ export function dismissThreadSuggestionPatch(scene, threadId) {
   const dismissed = Array.isArray(scene?.dismissedLinks) ? scene.dismissedLinks.filter(isId) : []
   return dismissed.includes(dismissKey(threadId)) ? {} : { dismissedLinks: [...dismissed, dismissKey(threadId)] }
 }
+
+// ---- B2: the Threads grid ---------------------------------------------------------------------------------
+
+const ROLE_STRENGTH = { payoff: 4, setup: 3, development: 2, mention: 1 }
+
+// Rows are threads, columns are chapters (or scenes) in manuscript order, a cell says how the thread appears
+// there. `outline` is buildOutlineModel's result, so ordering is the same everywhere. Chapters or scenes that are
+// not placed in an act are left out, the same as in the Outline's main tree. Pure and total: junk in, empty out.
+//   by: 'chapter' (default) | 'scene'
+export function buildThreadGrid({ threads, outline, scenes, by = 'chapter' }) {
+  const threadList = Array.isArray(threads) ? threads : []
+  const sceneList = Array.isArray(scenes) ? scenes : []
+  const linksByScene = new Map(sceneList.map(scene => [scene.id, getSceneThreadLinks(scene)]))
+  const actEntries = Array.isArray(outline?.acts) ? outline.acts : []
+
+  const columns = []
+  const groups = []
+  actEntries.forEach(entry => {
+    const before = columns.length
+    ;(entry.chapters || []).forEach(chapterEntry => {
+      if (by === 'scene') {
+        ;(chapterEntry.scenes || []).forEach(scene => columns.push({
+          id: scene.id, label: scene.title || 'Untitled scene', kind: 'scene', sceneIds: [scene.id], chapterId: chapterEntry.chapter.id,
+        }))
+      } else {
+        columns.push({
+          id: chapterEntry.chapter.id, label: chapterEntry.chapter.title || 'Untitled chapter', kind: 'chapter',
+          sceneIds: (chapterEntry.scenes || []).map(scene => scene.id), chapterId: chapterEntry.chapter.id,
+        })
+      }
+    })
+    const span = columns.length - before
+    if (span > 0) groups.push({ id: entry.act.id, label: entry.act.title || 'Untitled act', span })
+  })
+
+  const rows = threadList.filter(thread => thread?.id).map(thread => {
+    let total = 0
+    const cells = columns.map(column => {
+      const hits = []
+      column.sceneIds.forEach(sceneId => {
+        const link = (linksByScene.get(sceneId) || []).find(item => item.threadId === thread.id)
+        if (link) hits.push({ sceneId, role: link.role })
+      })
+      if (!hits.length) return { columnId: column.id, count: 0, role: null, hits }
+      total += hits.length
+      const role = hits.reduce((best, hit) => (ROLE_STRENGTH[hit.role] > ROLE_STRENGTH[best] ? hit.role : best), hits[0].role)
+      return { columnId: column.id, count: hits.length, role, hits }
+    })
+    return { thread, cells, total }
+  })
+  return { columns, groups, rows }
+}
+
+// The same information as text, for narrow screens: where a thread appears, in order.
+export function threadAppearances(row, columns) {
+  return row.cells
+    .map((cell, index) => (cell.count ? { label: columns[index].label, role: cell.role, count: cell.count, sceneId: cell.hits[0].sceneId } : null))
+    .filter(Boolean)
+}
