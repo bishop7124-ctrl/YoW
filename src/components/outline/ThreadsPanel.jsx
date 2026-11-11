@@ -142,7 +142,7 @@ export default function ThreadsPanel({ store }) {
           <p>Storylines that run through your manuscript. Attach scenes to a thread from a scene's Inspector (Scene tab).</p>
         </div>
         {!disabled && editing !== 'new' && (
-          <button type="button" className="btn btn-primary" disabled={atLimit} onClick={() => { setEditing('new'); setConfirmDelete(null) }}>+ New thread</button>
+          <button type="button" className="btn btn-primary" disabled={atLimit || editing !== null} onClick={() => { setEditing('new'); setConfirmDelete(null) }}>+ New thread</button>
         )}
       </div>
       {plotThreads.length > 0 && (
@@ -194,7 +194,7 @@ export default function ThreadsPanel({ store }) {
                     </div>
                   ) : (
                     <div className="thr-actions">
-                      <button type="button" className="thr-link" aria-label={`Edit ${thread.name}`} onClick={() => { setEditing(thread.id); setConfirmDelete(null) }}>Edit</button>
+                      <button type="button" className="thr-link" disabled={editing !== null} aria-label={`Edit ${thread.name}`} onClick={() => { setEditing(thread.id); setConfirmDelete(null) }}>Edit</button>
                       <button type="button" className="thr-link" aria-label={`Delete ${thread.name}`} onClick={() => setConfirmDelete(thread.id)}>Delete</button>
                     </div>
                   )

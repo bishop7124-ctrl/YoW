@@ -85,11 +85,11 @@ describe('StoryOutline Structure tab', () => {
     const store = { ...makeStore(), moveAct: vi.fn(), addAct: vi.fn() }
     flag.on = false
     const { unmount } = render(<StoryOutline store={store} />)
-    expect(screen.queryByRole('tab', { name: 'Structure' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Structure' })).toBeNull()
     unmount()
     flag.on = true
     render(<StoryOutline store={store} />)
-    fireEvent.click(screen.getByRole('tab', { name: 'Structure' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Structure' }))
     expect(screen.getByTestId('structure-panel')).toBeTruthy()
   })
 })

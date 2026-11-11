@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 
 import { countWords } from '../../utils/dailyWords'
 import { useFeatureFlag } from '../../utils/useFeatureFlag'
-import { getSceneTension, averageTension, tensionCoverage, TENSION_LEVELS } from '../../utils/sceneTension'
+import { getSceneTension, averageTension, TENSION_LEVELS } from '../../utils/sceneTension'
 
 // A line over the bars showing each scene's (or chapter's average) tension rating, drawn from where the bars
 // actually are so it stays aligned however wide the chart is. Unrated columns are skipped. Display only.
@@ -122,7 +122,8 @@ export default function PacingChart({ scenes, chapters, acts, activeNovelId, onO
 
   const bars = mode === 'scene' ? sceneBars : chapterBars
   const tensions = useMemo(() => bars.map(bar => bar.tension), [bars])
-  const coverage = useMemo(() => tensionCoverage(novelScenes), [novelScenes])
+  // Counted over the scenes the chart draws (placed in an act), so the note always matches the bars.
+  const coverage = useMemo(() => ({ rated: sceneBars.filter(bar => bar.tension !== null).length, total: sceneBars.length }), [sceneBars])
   const maxWords = Math.max(...bars.map(b => b.wordCount), 1)
   const avgWords = bars.length ? Math.round(bars.reduce((s, b) => s + b.wordCount, 0) / bars.length) : 0
   const shortBar = bars.length ? bars.reduce((a, b) => b.wordCount < a.wordCount ? b : a) : null

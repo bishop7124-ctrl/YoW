@@ -39,6 +39,15 @@ describe('ThreadsPanel', () => {
     expect(store.addPlotThread).toHaveBeenCalledWith(expect.objectContaining({ name: 'The heist', kind: 'custom', customLabel: 'Caper', characterIds: ['c1'], color: expect.stringMatching(/^#/) }))
   })
 
+  it('will not start editing another thread while one editor is open', () => {
+    const store = makeStore({ plotThreads: [thread(), thread({ id: 't2', name: 'Other' })] })
+    render(<ThreadsPanel store={store} />)
+    showList()
+    fireEvent.click(screen.getByText('+ New thread'))
+    expect(screen.getByLabelText('Edit The heir').disabled).toBe(true)
+    expect(screen.getByLabelText('Edit Other').disabled).toBe(true)
+  })
+
   it('lists threads with their kind, status and how scenes use them', () => {
     const store = makeStore({
       plotThreads: [thread(), thread({ id: 't2', name: 'Old grudge', status: 'dropped', kind: 'custom', customLabel: 'Feud' })],
@@ -152,7 +161,7 @@ describe('ThreadsPanel grid', () => {
 describe('StoryOutline Threads view', () => {
   const outlineStore = () => makeStore({ acts: [{ id: 'a1', title: 'Act 1', order: 0 }], moveAct: vi.fn(), addAct: vi.fn() })
   it('opens on the Threads view once when a Story Check finding asked for it', () => {
-    sessionStorage.setItem('yow_outline_view', 'threads')
+    sessionStorage.setItem('yow_outline_view', `threads:${Date.now()}`)
     const first = render(<StoryOutline store={outlineStore()} />)
     expect(screen.getByTestId('threads-panel')).toBeTruthy()
     expect(sessionStorage.getItem('yow_outline_view')).toBeNull() // one-shot
@@ -160,16 +169,21 @@ describe('StoryOutline Threads view', () => {
     render(<StoryOutline store={outlineStore()} />)
     expect(screen.queryByTestId('threads-panel')).toBeNull()
   })
+  it('ignores a Threads hint that nothing consumed in time', () => {
+    sessionStorage.setItem('yow_outline_view', `threads:${Date.now() - 60000}`)
+    render(<StoryOutline store={outlineStore()} />)
+    expect(screen.queryByTestId('threads-panel')).toBeNull()
+  })
   it('offers the Threads view only while the flag is on', () => {
     flag.on = false
     const { unmount } = render(<StoryOutline store={outlineStore()} />)
-    expect(screen.queryByRole('tab', { name: 'Threads' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Threads' })).toBeNull()
     unmount()
     flag.on = true
     render(<StoryOutline store={outlineStore()} />)
-    fireEvent.click(screen.getByRole('tab', { name: 'Threads' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Threads' }))
     expect(screen.getByTestId('threads-panel')).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: 'Outline' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Outline' }))
     expect(screen.queryByTestId('threads-panel')).toBeNull()
   })
 })

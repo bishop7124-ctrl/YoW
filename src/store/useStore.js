@@ -4042,7 +4042,7 @@ export function useStore(userId = null, options = {}) {
   // ---- plot threads (Release B) ------------------------------------------------------------------------
   // Threads belong to one project. The records and their scene links are plain additive data; the Threads UI
   // is behind the `plot_threads` flag, and cloud sync only runs while that flag is on (see the sync effect).
-  const novelPlotThreads = projectThreads(plotThreads, activeNovelId)
+  const novelPlotThreads = useMemo(() => projectThreads(plotThreads, activeNovelId), [plotThreads, activeNovelId])
 
   const addPlotThread = (data) => {
     const projectId = currentActiveProjectId()

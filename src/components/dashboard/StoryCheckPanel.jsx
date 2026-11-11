@@ -131,7 +131,7 @@ export default function StoryCheckPanel({ store }) {
 
       {showRules && (
         <div className="story-check-rules">
-          {RULES.map(rule => (
+          {RULES.filter(rule => threadsEnabled || !/^R1[3-6]$/.test(rule.id)).map(rule => (
             <label key={rule.id}>
               <input type="checkbox" checked={!mutedRules.includes(rule.id)} onChange={() => toggleRule(rule.id)} />
               {rule.name}

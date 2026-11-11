@@ -358,7 +358,9 @@ const threadEvidence = (thread, value) => ({
 // Each live thread with where it appears, in manuscript order. Dropped threads are left out of every thread rule:
 // the writer has said they are not part of the story.
 function threadAppearances({ plotThreads = [], acts = [], chapters = [], scenes = [] }) {
-  const ordered = orderedScenes({ acts, chapters, scenes })
+  // Only scenes whose chapter is placed in an act, the same set the Outline and the Threads grid show.
+  const placedChapters = new Set(chapters.filter(chapter => acts.some(act => act.id === chapter.actId)).map(chapter => chapter.id))
+  const ordered = orderedScenes({ acts, chapters, scenes }).filter(scene => placedChapters.has(scene.chapterId))
   const appearances = new Map(plotThreads.filter(thread => thread?.id && thread.status !== 'dropped').map(thread => [thread.id, []]))
   ordered.forEach((scene, index) => {
     getSceneThreadLinks(scene).forEach(link => { appearances.get(link.threadId)?.push({ scene, index, role: link.role }) })

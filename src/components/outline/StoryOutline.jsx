@@ -231,7 +231,9 @@ function OutlineProject({ store }) {
     try {
       const wanted = sessionStorage.getItem('yow_outline_view')
       if (wanted) sessionStorage.removeItem('yow_outline_view')
-      return wanted === 'threads' ? 'threads' : 'outline'
+      // The hint expires after ten seconds, so one that nothing consumed cannot surprise a later visit.
+      const stamp = wanted?.startsWith('threads:') ? Number(wanted.slice(8)) : NaN
+      return Number.isFinite(stamp) && Date.now() - stamp < 10000 ? 'threads' : 'outline'
     } catch { return 'outline' }
   })
   const showThreads = threadsEnabled && view === 'threads'
@@ -315,10 +317,10 @@ function OutlineProject({ store }) {
     </div>
 
     {threadsEnabled && (
-      <div className="outline-viewswitch" role="tablist" aria-label="Outline views">
-        <button type="button" role="tab" aria-selected={!showThreads && !showStructure} className={!showThreads && !showStructure ? 'is-active' : ''} onClick={() => setView('outline')}>Outline</button>
-        <button type="button" role="tab" aria-selected={showThreads} className={showThreads ? 'is-active' : ''} onClick={() => setView('threads')}>Threads</button>
-        <button type="button" role="tab" aria-selected={showStructure} className={showStructure ? 'is-active' : ''} onClick={() => setView('structure')}>Structure</button>
+      <div className="outline-viewswitch" role="group" aria-label="Outline views">
+        <button type="button" aria-pressed={!showThreads && !showStructure} className={!showThreads && !showStructure ? 'is-active' : ''} onClick={() => setView('outline')}>Outline</button>
+        <button type="button" aria-pressed={showThreads} className={showThreads ? 'is-active' : ''} onClick={() => setView('threads')}>Threads</button>
+        <button type="button" aria-pressed={showStructure} className={showStructure ? 'is-active' : ''} onClick={() => setView('structure')}>Structure</button>
       </div>
     )}
 

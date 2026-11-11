@@ -290,4 +290,11 @@ describe('R13-R16 plot thread checks', () => {
   it('can be muted like any other rule', () => {
     expect(runStoryCheck({ acts, chapters, scenes: baseScenes(), plotThreads: [thread('t')] }, { mutedRules: ['R16'] }).findings.some(f => f.ruleId === 'R16')).toBe(false)
   })
+  it('ignores scenes whose chapter is not placed in an act, so R14 matches the grid', () => {
+    const scenes = baseScenes()
+    link(scenes, 0, 't', 'setup'); link(scenes, 17, 't', 'development') // inside the closing chapters: no R14
+    const strays = Array.from({ length: 12 }, (_, i) => ({ id: `x${i}`, title: `Stray ${i}`, chapterId: 'nowhere', order: i }))
+    expect(run([thread('t')], [...scenes, ...strays], 'R14')).toEqual([])
+    expect(run([thread('t')], [...scenes, ...strays], 'R15')).toHaveLength(1) // the gap is real (16 scenes) and unaffected by the strays
+  })
 })
