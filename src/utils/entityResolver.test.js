@@ -53,6 +53,13 @@ describe('buildEntityIndex', () => {
     expect(map['day one'].id).toBe('h1')
   })
 
+  it('indexes factions, with aliases, only when they are passed', () => {
+    expect(buildEntityIndex(data).map).toEqual(legacyMap(data))
+    const { map } = buildEntityIndex({ ...data, factions: [{ id: 'f1', name: 'The Wardens', aliases: ['the Watch'], description: 'Border guard' }] })
+    expect(map['the wardens']).toEqual({ id: 'f1', section: 'factions', sectionLabel: 'Faction', name: 'The Wardens', preview: 'Border guard' })
+    expect(map['the watch'].id).toBe('f1')
+  })
+
   it('does not report a record repeating its own name or the same alias twice', () => {
     const { collisions } = buildEntityIndex({ characters: [{ id: 'c1', name: 'Mira', aliases: ['mira', 'Mira', 'Mi'], keywords: ['Mi'] }] })
     expect(collisions).toEqual([])

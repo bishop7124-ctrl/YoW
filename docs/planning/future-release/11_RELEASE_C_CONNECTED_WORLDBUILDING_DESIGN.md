@@ -39,13 +39,13 @@ Everything stays native and AI-optional (D1 to D11). Each part sits behind its o
 | C2 | References as Lore entries with `kind: 'reference'`; URL, source and citation fields; "convert to Lore" | none | `references` | S–M |
 | C3 | `character_knowledge` table, a small panel on a character, rules R17–R18 | one new table (owner-applied) | `character_knowledge` | L |
 | C4 | Canon Explorer over existing links | none | `canon_explorer` | M, only if justified |
-| C5 | Document attachments | storage cost | gated on approval | L |
+| C5 | Document attachments, paid plans only | storage and scanning decisions | flagged, paid only | L |
 
 C1a to C1d, C2 and C4 need no migration. C3 needs one table, written exactly like `plot_threads` (owner-only access, size cap, project-delete cleanup trigger, applied by the owner).
 
 ## 4. Data model
 
-**Aliases.** `aliases: string[]` on characters (alongside the existing `keywords`, which keep working and are treated as aliases), locations, lore entries, world-history entries and timeline events. Each 2 to 80 characters, at most 20 per record, trimmed, case-insensitive duplicates and the record's own name dropped. Stored plainly on the record, so sync, export, import and merge carry them with no work. Parsing and limits live in `src/utils/entityResolver.js` (`recordAliases`, `parseAliasText`).
+**Aliases.** `aliases: string[]` on characters (alongside the existing `keywords`, which keep working and are treated as aliases), locations, lore entries, world-history entries, timeline events and factions. Each 2 to 80 characters, at most 20 per record, trimmed, case-insensitive duplicates and the record's own name dropped. Stored plainly on the record, so sync, export, import and merge carry them with no work. Parsing and limits live in `src/utils/entityResolver.js` (`recordAliases`, `parseAliasText`).
 
 **Resolver.** `buildEntityIndex(data)` returns `{ map, collisions }`. `map` is identical to the editor's previous map (later record wins a shared key, same entity shape). `collisions` lists every text shared by two or more different records, so the UI can warn. `collisionsForRecord` answers "what else answers to this name?" for an editor.
 
@@ -55,15 +55,15 @@ C1a to C1d, C2 and C4 need no migration. C3 needs one table, written exactly lik
 
 **Knowledge (C3).** `character_knowledge` rows `{ id, novelId, characterId, fact, learnedAtSceneId, learnedAtEventId, via, confidence }`. Native rules fire only on facts the writer recorded: acting on a fact in a scene earlier than the scene where it is learned. Never inferred from prose.
 
-## 5. Decisions needed
+## 5. Decisions
 
-| # | Decision | Recommendation |
+| # | Decision | Status |
 | --- | --- | --- |
-| D17 | Aliases on which record types | Characters, locations, lore, history and timeline. Factions and ideas later, if asked. |
-| D18 | How explicit references are stored | Scene-level list (`entityRefs`), not markers in the text. Safer for the manuscript; loses "exactly which word", which hover on passive highlights already covers. |
-| D19 | Where research lives | Lore entries with `kind: 'reference'`, own label, excluded from in-world exports by default. |
-| D20 | Character knowledge | Build as an optional power feature after C1/C2, behind its own flag, new table. Skip if C1/C2 show little use. |
-| D21 | Document attachments (C5) | Do not build yet. A business and cost decision: per-file cap, paid-only, virus handling, export size. |
+| D17 | Aliases on which record types | **Agreed 2026-11-12:** characters, locations, lore, history, timeline events and **factions**. Ideas later, if asked. The resolver already supports factions; the editor passes them in once alias support is switched on (C1b), so nothing changes before then. |
+| D18 | How explicit references are stored | **Open.** Recommendation: a list on the scene (Option A). Visual comparison shown to the owner 2026-11-12. |
+| D19 | Where research lives | **Agreed 2026-11-12:** its own **References** area, and reachable from anywhere. Built as a room of its own plus a slide-over References drawer openable from any room (topbar button and shortcut), so a writer can look something up without leaving the manuscript. Stored as Lore entries with `kind: 'reference'` (shares editor, sync, export and search) but shown only in References, never in the Lore room or in-world exports by default. |
+| D20 | Character knowledge | **Open.** Explained to the owner 2026-11-12. |
+| D21 | Document attachments (C5) | **Agreed in principle 2026-11-12: paid plans only.** Details confirmed when it is built: a per-file cap (proposed 10 MB), allowed types (PDF, DOCX, plain text, images), counting toward the storage allowance, inclusion in backups, and a decision on scanning uploads. Free accounts keep links, citations and notes. |
 
 ## 6. Risks and how they are handled
 

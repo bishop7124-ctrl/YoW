@@ -43,6 +43,10 @@ const SOURCES = [
     preview: r => r.summary || r.description || r.notes || r.role || '' },
   { list: 'locations', section: 'locations', label: 'Location', nameField: 'name', extra: [],
     preview: r => r.description || r.notes || r.summary || '' },
+  // Factions are only indexed when the caller passes them (the editor does so once alias support is switched on),
+  // so adding them here changes nothing for a caller that does not.
+  { list: 'factions', section: 'factions', label: 'Faction', nameField: 'name', extra: [],
+    preview: r => r.description || r.summary || r.notes || '' },
   { list: 'loreEntries', section: 'lore', label: 'Lore', nameField: 'title', extra: [],
     preview: r => r.content || r.summary || r.category || '' },
   { list: 'worldHistory', section: 'worldhistory', label: 'History', nameField: 'title', extra: [],
