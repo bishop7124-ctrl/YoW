@@ -117,4 +117,22 @@ describe('AIAssistant', () => {
     expect(messages.some(m => m.role === 'user' && m.content === 'What should happen next?')).toBe(true)
     expect(messages.some(m => m.role === 'assistant' && m.content === 'This is a plain-text answer, not JSON.')).toBe(true)
   })
+
+  it('cancels the request when the bar closes and ignores a reply that arrives afterwards (audit AUD-07)', async () => {
+    let request
+    streamMessage.mockImplementation(r => { request = r })
+    const updateNovel = vi.fn()
+    const store = { activeNovelId: 'project-1', activeNovel: { id: 'project-1', title: 'Project One', aiChatSessions: [] }, novels: [{ id: 'project-1', aiChatSessions: [] }], updateNovel }
+    const { unmount } = renderAssistant({ store })
+    const input = screen.getByPlaceholderText(/Ask about your project/)
+    fireEvent.change(input, { target: { value: 'Tell me about the heir' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(request.signal.aborted).toBe(false)
+    unmount()
+    expect(request.signal.aborted).toBe(true)
+    request.onChunk('A late answer.')
+    request.onDone()
+    expect(updateNovel).not.toHaveBeenCalled()
+  })
 })
+

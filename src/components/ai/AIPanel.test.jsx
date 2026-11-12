@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { streamMessage } from '../../utils/aiApi.js'
 import AIPanel from './AIPanel.jsx'
 import { AI_SETTINGS_KEY } from '../../utils/aiSettings.js'
+
+vi.mock('../../utils/aiApi.js', async importOriginal => ({ ...(await importOriginal()), streamMessage: vi.fn() }))
 
 const makeStore = (overrides = {}) => {
   const projectData = {
@@ -102,5 +105,38 @@ describe('AIPanel', () => {
     fireEvent.click(screen.getByText('Save context'))
     expect(screen.queryByText('Chat context')).toBeNull()
     expect(screen.getByTitle('Change what the AI can see in this chat').textContent).toMatch(/Choose Records/)
+  })
+
+  it('Stop cancels the provider request, and a late reply from it cannot touch a follow-up (audit AUD-07)', () => {
+    const requests = []
+    vi.mocked(streamMessage).mockImplementation(request => { requests.push(request) })
+    // The store keeps chat sessions on the project, so let updates stick the way the real one does.
+    const store = makeStore(richProject)
+    const sessions = []
+    store.novels[0].aiChatSessions = sessions
+    store.updateNovel = (id, patch) => { if (patch.aiChatSessions) { sessions.length = 0; sessions.push(...patch.aiChatSessions) } }
+    const view = render(<AIPanel store={store} open membership={{ isFree: false }} />)
+    fireEvent.click(screen.getByText('+ New chat'))
+    fireEvent.click(screen.getByText('Start Chat'))
+    const send = text => {
+      const box = screen.getByPlaceholderText(/Ask the AI/)
+      fireEvent.change(box, { target: { value: text } })
+      fireEvent.keyDown(box, { key: 'Enter' })
+    }
+    send('First question')
+    expect(requests).toHaveLength(1)
+    expect(requests[0].signal.aborted).toBe(false)
+    act(() => { requests[0].onChunk('partial') })
+    fireEvent.click(screen.getByTitle('Stop response'))
+    expect(requests[0].signal.aborted).toBe(true)
+    send('Second question')
+    expect(requests).toHaveLength(2)
+    act(() => { requests[0].onChunk(' LATE'); requests[0].onUsage?.({ inputTokens: 9 }); requests[0].onDone() })
+    act(() => { requests[1].onChunk('Fresh answer'); requests[1].onDone() })
+    const texts = JSON.stringify(sessions)
+    expect(texts).toContain('Fresh answer')
+    expect(texts).not.toContain('LATE')
+    view.unmount()
+    expect(requests[1].signal.aborted).toBe(true)
   })
 })

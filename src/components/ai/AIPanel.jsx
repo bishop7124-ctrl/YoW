@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { createRunGuard } from '../../utils/aiRunGuard'
 import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
 import { AI_CHAT_HISTORY_EVENT, createAiChatDocxBlob, getAiChatStorageKey, loadAiChatSessions, mergeAiChatSessions, normalizeAiChatSessions } from '../../utils/aiChatHistory'
@@ -387,7 +388,9 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   const isNearBottomRef = useRef(true)
   const [anchorSpacer, setAnchorSpacer] = useState(0)
   const anchorReplyIdRef = useRef(null)
-  const abortRef       = useRef(false)
+  // One live request at a time; Stop, a new request, switching conversation or closing the panel cancels the old one.
+  const runGuard       = useMemo(() => createRunGuard(), [])
+  useEffect(() => () => runGuard.stop(), [runGuard])
   const inputRef       = useRef(null)
   const categoryInputRef = useRef(null)
   const titleInputRef     = useRef(null)
@@ -612,8 +615,10 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
 
     let accumulated = ''
     let latestUsage = null
+    const run = runGuard.start()
 
     streamMessage({
+      signal: run.signal,
       provider,
       apiKey:  provCfg.apiKey,
       model,
@@ -623,7 +628,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
       cacheControl: builtContext.cache,
       promptMetadata,
       onChunk: (chunk) => {
-        if (abortRef.current) return
+        if (!run.isCurrent()) return
         accumulated += chunk
         // Update local state on every chunk (cheap) so it still looks live;
         // only push into the session/global store periodically (see
@@ -639,6 +644,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         }
       },
       onDone: () => {
+        if (!run.isCurrent()) return
         setStreaming(false)
         if (latestUsage) onUsage?.(latestUsage)
         onUpdate(session.id, {
@@ -648,6 +654,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         setLiveMessage(null)
       },
       onUsage: (usage) => {
+        if (!run.isCurrent()) return
         latestUsage = mergeUsageEvent(latestUsage, usage)
         onUpdate(session.id, {
           messages: nextMessages.map(m => m.id === assistantMsgId ? { ...m, usage: latestUsage, contextStats: messageContextStats } : m),
@@ -656,6 +663,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
         })
       },
       onError: (err) => {
+        if (!run.isCurrent()) return
         setStreaming(false)
         onUpdate(session.id, {
           messages: nextMessages.map(m => m.id === assistantMsgId ? { ...m, content: `Error: ${err}`, streaming: false, error: true } : m),
@@ -675,7 +683,6 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
       return
     }
     setInput('')
-    abortRef.current = false
 
     const userMsg      = { id: uid(), role: 'user',      content: text }
     const assistantMsg = { id: uid(), role: 'assistant', content: '', streaming: true }
@@ -697,7 +704,6 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
       onUpdate(session.id, { messages: [...priorMessages, assistantMsg, ...messages.slice(idx + 1)], updatedAt: Date.now() })
       return
     }
-    abortRef.current = false
     const assistantMsg = { id: uid(), role: 'assistant', content: '', streaming: true }
     const nextMessages = [...priorMessages, assistantMsg, ...messages.slice(idx + 1)]
     const apiMessages  = priorMessages.map(m => ({ role: m.role, content: m.content }))
@@ -706,7 +712,7 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
   }
 
   const stop = () => {
-    abortRef.current = true
+    runGuard.stop()
     setStreaming(false)
     const stoppedMessages = messages.map(m => {
       if (!m.streaming) return m
@@ -1500,6 +1506,7 @@ export default function AIPanel({ store, open, onClose, initialContext, membersh
           )}
           {view === 'chat' && activeSession && (
             <ChatView
+              key={activeSession.id}
               session={activeSession}
               store={store}
               aiSettings={aiSettings}

@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
+import { createRunGuard } from '../../utils/aiRunGuard'
 import { streamMessage, PROVIDERS } from '../../utils/aiApi'
 import { DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
 import { AI_CHAT_HISTORY_EVENT, appendAiBarExchange, appendAiBarExchangeToSessions, getAiChatStorageKey } from '../../utils/aiChatHistory'
@@ -287,6 +288,9 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
   const [parsed, setParsed] = useState(null)
   const [errMsg, setErrMsg] = useState('')
   const inputRef = useRef(null)
+  // The request is cancelled when this bar unmounts (e.g. the writer changes section), and a late reply is ignored.
+  const runGuard = useMemo(() => createRunGuard(), [])
+  useEffect(() => () => runGuard.stop(), [runGuard])
 
   const cfg = SECTION_CONFIG[section] || SECTION_CONFIG.dashboard
 
@@ -313,8 +317,10 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
     const systemPrompt = buildSystemPrompt(section, store, { userPrompt: text, provider, model })
     const isGoogle = provider === 'google'
     let accumulated = ''
+    const run = runGuard.start()
 
     streamMessage({
+      signal: run.signal,
       provider,
       apiKey:   provCfg.apiKey,
       model,
@@ -324,6 +330,7 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
       jsonMode: isGoogle,
       onChunk:  (chunk) => { accumulated += chunk },
       onDone:   () => {
+        if (!run.isCurrent()) return
         try {
           const cleaned = accumulated
             .replace(/^```(?:json)?\s*/i, '')
@@ -370,6 +377,7 @@ export default function AIAssistant({ store, section, onOpenChat, aiOpen, userId
         inputRef.current?.focus()
       },
       onError: (err) => {
+        if (!run.isCurrent()) return
         setErrMsg(err)
         setInput(text)
         setStatus('error')

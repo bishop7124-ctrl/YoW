@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { createRunGuard } from '../../utils/aiRunGuard'
 import { captureSource, checkApply } from '../../utils/aiSuggestionSource'
 import { streamMessage } from '../../utils/aiApi'
 import { getActiveAiConfig } from '../../utils/aiSettings'
@@ -85,12 +86,12 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
   const [targetPov, setTargetPov] = useState(POV_OPTIONS[0].value)
   const [targetTense, setTargetTense] = useState(TENSE_OPTIONS[0].value)
   const [rewriteProgress, setRewriteProgress] = useState(null)
-  const abortRef = useRef(false)
+  const runGuard = useMemo(() => createRunGuard(), [])
   const suggestionRef = useRef('')
   // What the shown suggestion was written for (scene, highlight, text then), so it is only applied where it still fits.
   const [source, setSource] = useState(null)
-  // A suggestion still streaming when the panel closes must not keep writing into state.
-  useEffect(() => () => { abortRef.current = true }, [])
+  // A suggestion still streaming when the panel closes is cancelled, not just ignored.
+  useEffect(() => () => runGuard.stop(), [runGuard])
 
   const configured = !!loadAIConfig(userId)
   const activeType = getProjectType(activeNovel?.type)
@@ -116,24 +117,25 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
       if (!options.rewrite) setRewriteProgress(null)
     }
     setStreaming(true)
-    abortRef.current = false
+    const run = runGuard.start()
 
     let buf = ''
     const joiner = options.joiner || ''
     streamMessage({
+	      signal: run.signal,
 	      ...config,
 	      systemPrompt: buildSystemPrompt(activeNovel, activeScene, characters, locations, selectedText, options.contextText),
       messages: [{ role: 'user', content: userText }],
       maxTokens: options.rewrite ? REWRITE_MAX_OUTPUT_TOKENS : 800,
       onChunk: c => {
-        if (abortRef.current) return
+        if (!run.isCurrent()) return
         buf += c
         const combined = `${baseSuggestion}${baseSuggestion ? joiner : ''}${buf}`
         suggestionRef.current = combined
         setSuggestion(combined)
       },
       onDone:  ()  => {
-        if (abortRef.current) return
+        if (!run.isCurrent()) return
         setStreaming(false)
         if (!buf.trim()) {
           setError('The AI returned no rewritten text. Try this chunk again.')
@@ -144,7 +146,7 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
         }
       },
       onError: e   => {
-        if (abortRef.current) return
+        if (!run.isCurrent()) return
         // A provider can fail after streaming part of a later chunk. Roll that
         // incomplete fragment back so Retry/Continue cannot duplicate it.
         if (options.rewrite) {
@@ -155,7 +157,7 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
         setStreaming(false)
       },
     })
-	  }, [prompt, activeScene, activeNovel, characters, locations, selectedText, userId])
+	  }, [prompt, activeScene, activeNovel, characters, locations, selectedText, userId, runGuard])
 
   const startRewrite = (kind, target) => {
     if (!activeScene) return
@@ -187,7 +189,7 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
     })
   }
 
-  const handleStop = () => { abortRef.current = true; setStreaming(false) }
+  const handleStop = () => { runGuard.stop(); setStreaming(false) }
 
   // The suggestion keeps the mode it was written for: a passage replace stays a passage replace even if the
   // writer has since highlighted something else, and a whole-scene rewrite never replaces a highlight.

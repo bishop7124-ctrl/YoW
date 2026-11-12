@@ -176,3 +176,25 @@ describe('AISuggestionPanel apply guards (audit AUD-21)', () => {
     expect(onReplaceSelection).not.toHaveBeenCalled()
   })
 })
+
+describe('AISuggestionPanel cancellation (audit AUD-07)', () => {
+  it('cancels the request on Stop and when the panel closes, and ignores late text from a cancelled request', () => {
+    aiConfig.current = { provider: 'openai', apiKey: 'test-key', model: 'test-model' }
+    const requests = []
+    vi.mocked(streamMessage).mockImplementation(request => { requests.push(request) })
+    const view = render(<AISuggestionPanel {...props} />)
+    fireEvent.change(screen.getByPlaceholderText(/Describe what you need/), { target: { value: 'Continue' } })
+    fireEvent.click(screen.getByText('Generate'))
+    expect(requests[0].signal.aborted).toBe(false)
+    fireEvent.click(screen.getByText('Stop'))
+    expect(requests[0].signal.aborted).toBe(true)
+    // a follow-up request is independent, and the stopped one can no longer write into the panel
+    fireEvent.click(screen.getByText('Generate'))
+    act(() => { requests[0].onChunk('STALE TEXT'); requests[0].onDone() })
+    act(() => { requests[1].onChunk('Fresh text.') })
+    expect(screen.queryByText(/STALE TEXT/)).toBeNull()
+    expect(screen.getByText(/Fresh text\./)).toBeTruthy()
+    view.unmount()
+    expect(requests[1].signal.aborted).toBe(true)
+  })
+})
