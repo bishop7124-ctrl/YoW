@@ -35,7 +35,7 @@ Everything stays native and AI-optional (D1 to D11). Each part sits behind its o
 | **C1a** | One shared resolver module: aliases on every record type, collision list, exact legacy behaviour. Editor switched to it. | none | none (behaviour-preserving) | S, **built** |
 | C1b | Alias fields in the character, location, lore and history editors; collision warning under the field and in Story Check as an info note | none (additive `aliases[]`) | `connected_refs` | S–M |
 | C1c | ~~Hover preview~~ **Already exists** in the scene editor (see section 2); nothing to build. Aliases get it through the shared lookup. | none | none | done |
-| C1d | Explicit references: "Link to…" on a selection or from the Inspector, stored as `scene.entityRefs`; remapped on import and merge; cleared on delete | none | `connected_refs` | M |
+| C1d | Explicit references: extends the Story links panel with Lore, Factions and History groups; remapped on import and merge; cleared on delete. **Built.** | none | `connected_refs` | M |
 | C2 | References as Lore entries with `kind: 'reference'`; URL, source and citation fields; "convert to Lore" | none | `references` | S–M |
 | C3 | `character_knowledge` table, a small panel on a character, rules R17–R18 | one new table (owner-applied) | `character_knowledge` | L |
 | C4 | Canon Explorer over existing links | none | `canon_explorer` | M, only if justified |
@@ -89,6 +89,12 @@ Behind the new `connected_refs` flag (off for everyone). An **Other names** fiel
 
 Browser-checked in a scratch copy: field renders, chips add on Enter and comma, the clash warning shows, and the aliases survive save and reopen.
 
-## 9. Next
+## 9. C1d as built (2026-11-12)
+
+The Story links panel (A4) gained three groups, **Lore, Factions and History**, shown only while `connected_refs` is on. Each has an add picker, removable chips, a plain "Deleted lore entry" label for a link whose record is gone, and suggestions from the names and other names in the scene text (nothing is added until confirmed; dismissals are remembered). Decision D18 said "a list on the scene"; it is stored as **three id lists, `loreIds`, `factionIds` and `historyEntryIds`**, the same shape as `characterIds` and `locationIds`, rather than a single `entityRefs` list of `{type, id}`. Same idea, but the existing delete cleanup, project import and merge remap, and AI-import remap all already work on id lists of this kind, so there is one mechanism instead of two. Also: other names now feed the existing character, place and event suggestions, and delete cleanup (`scenesWithoutLinks`), import remap (`remapSceneLinks`, `importGraph`) cover the new fields. Browser-checked in a scratch copy: the three groups and pickers appear, a lore suggestion from the text was added and its suggestion disappeared.
+
+Not done: Story Check does not yet report a dangling link of these three types (delete cleanup already removes them, so it is a safety net only).
+
+## 10. Next
 
 C1c needs no work (the hover preview already exists). **C1d** is next, and it extends the existing "Story links" panel (A4) instead of adding a second one: that panel already links characters, places and timeline events to a scene. C1d adds three more groups to it, **Lore entries, Factions and History entries**, stored as `scene.entityRefs`, with suggestions from names and other names in the scene text, removal when the record is deleted, and id remapping on import and merge. Characters, places and events keep their A4 fields, so nothing is stored twice. Behind `connected_refs`.
