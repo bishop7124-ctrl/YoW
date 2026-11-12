@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
+import { captureSource, checkApply } from '../../utils/aiSuggestionSource'
 import { streamMessage } from '../../utils/aiApi'
 import { getActiveAiConfig } from '../../utils/aiSettings'
 import { getProjectType } from '../../constants/projectTypes'
@@ -86,6 +87,10 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
   const [rewriteProgress, setRewriteProgress] = useState(null)
   const abortRef = useRef(false)
   const suggestionRef = useRef('')
+  // What the shown suggestion was written for (scene, highlight, text then), so it is only applied where it still fits.
+  const [source, setSource] = useState(null)
+  // A suggestion still streaming when the panel closes must not keep writing into state.
+  useEffect(() => () => { abortRef.current = true }, [])
 
   const configured = !!loadAIConfig(userId)
   const activeType = getProjectType(activeNovel?.type)
@@ -105,6 +110,7 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
     setError('')
     const baseSuggestion = options.append ? suggestionRef.current.trimEnd() : ''
     if (!options.append) {
+      setSource(captureSource(activeScene, selectedText))
       suggestionRef.current = ''
       setSuggestion('')
       if (!options.rewrite) setRewriteProgress(null)
@@ -183,21 +189,26 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
 
   const handleStop = () => { abortRef.current = true; setStreaming(false) }
 
+  // The suggestion keeps the mode it was written for: a passage replace stays a passage replace even if the
+  // writer has since highlighted something else, and a whole-scene rewrite never replaces a highlight.
+  const replacesSelection = Boolean(source ? source.selection : hasSelectedText)
+  const appendCheck = suggestion ? checkApply(source, activeScene, selectedText, 'append') : { ok: true }
+  const replaceCheck = suggestion ? checkApply(source, activeScene, selectedText, 'replace') : { ok: true }
+  const clearSuggestion = () => { setSuggestion(''); suggestionRef.current = ''; setRewriteProgress(null); setSource(null) }
+
   const handleAppend = () => {
     if (!suggestion.trim() || !activeScene) return
+    if (!appendCheck.ok) { setError(appendCheck.reason); return }
     onAppendToScene(activeScene.id, suggestion.trim())
-    setSuggestion('')
-    suggestionRef.current = ''
-    setRewriteProgress(null)
+    clearSuggestion()
   }
 
   const handleReplace = () => {
     if (!suggestion.trim() || !activeScene) return
-    if (hasSelectedText) onReplaceSelection(activeScene.id, suggestion.trim())
+    if (!replaceCheck.ok) { setError(replaceCheck.reason); return }
+    if (replacesSelection) onReplaceSelection(activeScene.id, suggestion.trim())
     else onReplaceScene?.(activeScene.id, suggestion.trim())
-    setSuggestion('')
-    suggestionRef.current = ''
-    setRewriteProgress(null)
+    clearSuggestion()
   }
 
   const handleCopy = () => {
@@ -359,6 +370,7 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
             {suggestion}
             {streaming && <span className="ai-cursor" />}
           </div>
+          {!streaming && !replaceCheck.ok && <p className="ai-error" role="status">{replaceCheck.reason}</p>}
           {!streaming && (
             <div className="ai-output-actions">
               {rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length && (
@@ -369,7 +381,7 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
               <button
                 className={`ai-btn${rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length ? '' : ' ai-btn--primary'}`}
                 onClick={handleAppend}
-                disabled={!activeScene || (rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length)}
+                disabled={!activeScene || !appendCheck.ok || (rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length)}
                 title={rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length ? 'Finish every chunk before inserting the rewrite' : (activeScene ? undefined : 'Focus a scene first')}
               >
 	                Insert at cursor
@@ -377,13 +389,13 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
               <button
                 className="ai-btn"
                 onClick={handleReplace}
-                disabled={!activeScene || (!hasSelectedText && !onReplaceScene) || (rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length)}
+                disabled={!activeScene || !replaceCheck.ok || (!replacesSelection && !onReplaceScene) || (rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length)}
                 title={rewriteProgress && rewriteProgress.completedChunks < rewriteProgress.chunks.length ? 'Finish every chunk before replacing text' : (hasSelectedText ? 'Replace the highlighted text' : 'Replace the focused scene')}
               >
-                {hasSelectedText ? 'Replace selection' : 'Replace scene'}
+                {replacesSelection ? 'Replace selection' : 'Replace scene'}
               </button>
               <button className="ai-btn" onClick={handleCopy}>Copy</button>
-              <button className="ai-btn ai-btn--muted" onClick={() => { setSuggestion(''); suggestionRef.current = ''; setRewriteProgress(null) }}>Discard</button>
+              <button className="ai-btn ai-btn--muted" onClick={clearSuggestion}>Discard</button>
             </div>
           )}
         </>

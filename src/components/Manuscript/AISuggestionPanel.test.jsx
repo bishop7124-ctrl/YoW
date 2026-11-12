@@ -121,3 +121,58 @@ describe('AISuggestionPanel hierarchy', () => {
     expect(screen.getByText('Rewrite point of view or tense')).toBeTruthy()
   })
 })
+
+describe('AISuggestionPanel apply guards (audit AUD-21)', () => {
+  const generateOnce = (extraProps = {}) => {
+    aiConfig.current = { provider: 'openai', apiKey: 'test-key', model: 'test-model' }
+    const requests = []
+    vi.mocked(streamMessage).mockImplementation(request => { requests.push(request) })
+    const view = render(<AISuggestionPanel {...props} {...extraProps} />)
+    fireEvent.change(screen.getByPlaceholderText(/Describe what you need/), { target: { value: 'Continue' } })
+    fireEvent.click(screen.getByText('Generate'))
+    act(() => { requests[0].onChunk('A new paragraph.'); requests[0].onDone() })
+    return { requests, ...view }
+  }
+
+  it('refuses to apply a suggestion written for one scene to another, and keeps the text so it can be copied', () => {
+    const onAppendToScene = vi.fn()
+    const { rerender } = generateOnce({ onAppendToScene })
+    rerender(<AISuggestionPanel {...props} onAppendToScene={onAppendToScene} activeScene={{ id: 'scene-2', title: 'Cellar', content: 'Other scene.' }} />)
+    expect(screen.getByText('A new paragraph.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Insert at cursor' }).disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toMatch(/written for "Opening"/)
+    fireEvent.click(screen.getByRole('button', { name: 'Insert at cursor' }))
+    expect(onAppendToScene).not.toHaveBeenCalled()
+    // back on the original scene it can be applied
+    rerender(<AISuggestionPanel {...props} onAppendToScene={onAppendToScene} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Insert at cursor' }))
+    expect(onAppendToScene).toHaveBeenCalledWith('scene-1', 'A new paragraph.')
+  })
+
+  it('does not replace a scene that was edited after the rewrite was written', () => {
+    const onReplaceScene = vi.fn()
+    const { rerender } = generateOnce({ onReplaceScene })
+    rerender(<AISuggestionPanel {...props} onReplaceScene={onReplaceScene} activeScene={{ ...props.activeScene, content: 'Once upon a time. And then more typing.' }} />)
+    expect(screen.getByRole('button', { name: 'Replace scene' }).disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toMatch(/edited since/)
+    expect(screen.getByRole('button', { name: 'Insert at cursor' }).disabled).toBe(false) // inserting keeps the new edits
+  })
+
+  it('replaces a highlighted passage only while that passage is still highlighted, and a scene rewrite never replaces a later highlight', () => {
+    const onReplaceSelection = vi.fn()
+    const { rerender } = generateOnce({ onReplaceSelection, selectedText: 'Once upon' })
+    expect(screen.getByRole('button', { name: 'Replace selection' }).disabled).toBe(false)
+    rerender(<AISuggestionPanel {...props} onReplaceSelection={onReplaceSelection} selectedText="a different passage" />)
+    expect(screen.getByRole('button', { name: 'Replace selection' }).disabled).toBe(true)
+    rerender(<AISuggestionPanel {...props} onReplaceSelection={onReplaceSelection} selectedText="Once upon" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Replace selection' }))
+    expect(onReplaceSelection).toHaveBeenCalledWith('scene-1', 'A new paragraph.')
+    cleanup()
+    vi.clearAllMocks()
+    const onReplaceScene = vi.fn()
+    const whole = generateOnce({ onReplaceScene, onReplaceSelection })
+    whole.rerender(<AISuggestionPanel {...props} onReplaceScene={onReplaceScene} onReplaceSelection={onReplaceSelection} selectedText="highlighted later" />)
+    expect(screen.getByRole('button', { name: 'Replace scene' })).toBeTruthy() // still the whole-scene mode it was written for
+    expect(onReplaceSelection).not.toHaveBeenCalled()
+  })
+})
