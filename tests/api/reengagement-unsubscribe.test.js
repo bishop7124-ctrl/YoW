@@ -13,7 +13,7 @@ const makeRes = () => ({
   send: vi.fn(),
 })
 
-const makeReq = (query = {}) => ({ method: 'GET', query })
+const makeReq = (query = {}, method = 'GET') => ({ method, query })
 
 const SECRET = 'test-unsubscribe-secret'
 const USER_ID = '11111111-2222-3333-4444-555555555555'
@@ -79,17 +79,55 @@ describe('reengagement-unsubscribe handler', () => {
     expect(getUserById).not.toHaveBeenCalled()
   })
 
-  it('accepts a correctly signed link and opts the user out', async () => {
-    getUserById.mockResolvedValue({ data: { user: { id: USER_ID, user_metadata: {} } }, error: null })
-    updateUserById.mockResolvedValue({ data: {}, error: null })
+  it('a correctly signed GET (what a mail scanner does) only shows the confirmation page and changes nothing (AUD-25)', async () => {
     const res = makeRes()
     const sig = signUnsubscribeLink(USER_ID, SECRET)
     await handler(makeReq({ u: USER_ID, sig }), res)
     expect(res.status).toHaveBeenCalledWith(200)
+    expect(getUserById).not.toHaveBeenCalled()
+    expect(updateUserById).not.toHaveBeenCalled()
+    const page = res.send.mock.calls[0][0]
+    expect(page).toContain('<form method="POST"')
+    expect(page).toContain(`u=${USER_ID}`)
+    expect(page).toContain(`sig=${sig}`)
+    expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store')
+  })
+
+  it('a signed POST opts the user out, and only then says Done', async () => {
+    getUserById.mockResolvedValue({ data: { user: { id: USER_ID, user_metadata: { keep: 1 } } }, error: null })
+    updateUserById.mockResolvedValue({ data: {}, error: null })
+    const res = makeRes()
+    const sig = signUnsubscribeLink(USER_ID, SECRET)
+    await handler(makeReq({ u: USER_ID, sig }, 'POST'), res)
+    expect(res.status).toHaveBeenCalledWith(200)
     expect(updateUserById).toHaveBeenCalledWith(
       USER_ID,
-      expect.objectContaining({ user_metadata: expect.objectContaining({ reengagement_opt_out: true }) })
+      expect.objectContaining({ user_metadata: expect.objectContaining({ keep: 1, reengagement_opt_out: true }) })
     )
+    expect(res.send.mock.calls[0][0]).toContain('Done.')
+  })
+
+  it('does NOT say Done when the update comes back with an error (AUD-25)', async () => {
+    getUserById.mockResolvedValue({ data: { user: { id: USER_ID, user_metadata: {} } }, error: null })
+    updateUserById.mockResolvedValue({ data: null, error: { message: 'database unavailable' } })
+    const res = makeRes()
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    await handler(makeReq({ u: USER_ID, sig: signUnsubscribeLink(USER_ID, SECRET) }, 'POST'), res)
+    expect(res.status).toHaveBeenCalledWith(500)
+    const page = res.send.mock.calls[0][0]
+    expect(page).not.toContain('Done.')
+    expect(page).toContain('you have not been unsubscribed')
+    spy.mockRestore()
+  })
+
+  it('a POST with a bad signature changes nothing, and other methods are refused', async () => {
+    const res = makeRes()
+    await handler(makeReq({ u: USER_ID, sig: 'deadbeef'.repeat(8) }, 'POST'), res)
+    expect(res.status).toHaveBeenCalledWith(400)
+    expect(updateUserById).not.toHaveBeenCalled()
+    const put = makeRes()
+    await handler(makeReq({ u: USER_ID }, 'PUT'), put)
+    expect(put.status).toHaveBeenCalledWith(405)
   })
 
   it('signature verification is genuinely tied to this exact secret', () => {
