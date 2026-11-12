@@ -35,6 +35,8 @@ import {
   downloadProjectPdf,
 } from '../utils/projectExport'
 import { readItem, writeItem } from '../storage/projectStorage'
+import { BACKUP_DEFAULTS, backupKey, buildBackupEntry, normalizeRetention, readBackups } from '../utils/projectBackups'
+import { useAutoProjectBackup } from '../utils/useAutoProjectBackup'
 import RecordConflictReview from './shared/RecordConflictReview'
 import { useIsMobile } from '../utils/useMediaQuery'
 import { uploadUserMedia, deleteUserMedia } from '../utils/uploadUserMedia'
@@ -161,19 +163,10 @@ const openUpgradePage = () => {
   window.dispatchEvent(new CustomEvent('open-account-settings', { detail: { tab: 'membership' } }))
 }
 
-const BACKUP_DEFAULTS = {
-  frequency: 'manual',
-  retention: 5,
-  includeMedia: true,
-  includeCustomerData: true,
-}
-
 const DEFAULT_CATEGORY_OPTIONS = {
   lore: ['Magic System', 'Religion', 'History', 'Politics', 'Geography', 'Culture', 'Technology', 'Prophecy', 'Mythology', 'Other'],
   schedule: ['Scene', 'Battle', 'Travel', 'Meeting', 'Festival', 'Other'],
 }
-
-const backupKey = projectId => `nf_project_backups_${projectId}`
 
 const safeSlug = value => String(value || 'project')
   .trim()
@@ -182,28 +175,10 @@ const safeSlug = value => String(value || 'project')
   .replace(/-+/g, '-')
   .replace(/^[-_.]+|[-_.]+$/g, '') || 'project'
 
-const stripMediaFromBackup = data => ({
-  ...data,
-  project: data.project ? { ...data.project, coverPhoto: null, bannerImage: null } : data.project,
-  series: data.series ? { ...data.series, coverPhoto: null } : data.series,
-  characters: (data.characters || []).map(item => ({ ...item, image: null, portrait: null, photo: null })),
-  locations: (data.locations || []).map(item => ({ ...item, image: null, photo: null })),
-  loreEntries: (data.loreEntries || []).map(item => ({ ...item, image: null, photo: null })),
-  maps: (data.maps || []).map(item => ({ ...item, image: null, backgroundImage: null, mapImage: null })),
-})
-
 const normalizeList = value => String(value || '')
   .split(',')
   .map(item => item.trim())
   .filter(Boolean)
-
-const shouldCreateAutoBackup = (config, lastBackupAt) => {
-  if (!config || config.frequency === 'manual') return false
-  if (!lastBackupAt) return true
-  const elapsed = Date.now() - Date.parse(lastBackupAt)
-  const interval = config.frequency === 'weekly' ? 7 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000
-  return elapsed >= interval
-}
 
 // ─── Project Settings ─────────────────────────────────────────────────────────
 
@@ -249,10 +224,7 @@ function ProjectSettings({ store, onClose }) {
     ...BACKUP_DEFAULTS,
     ...(novel?.backupConfig || {}),
   }))
-  const [localBackups, setLocalBackups] = useState(() => {
-    try { return JSON.parse(readItem(backupKey(novel?.id)) || '[]') }
-    catch { return [] }
-  })
+  const [localBackups, setLocalBackups] = useState(() => readBackups(readItem, novel?.id))
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -273,8 +245,7 @@ function ProjectSettings({ store, onClose }) {
       lore: (novel?.categoryOptions?.lore || DEFAULT_CATEGORY_OPTIONS.lore).join(', '),
       schedule: (novel?.categoryOptions?.schedule || DEFAULT_CATEGORY_OPTIONS.schedule).join(', '),
     })
-    try { setLocalBackups(JSON.parse(readItem(backupKey(novel?.id)) || '[]')) }
-    catch { setLocalBackups([]) }
+    setLocalBackups(readBackups(readItem, novel?.id))
   }, [novel?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const patchProject = (patch) => {
@@ -303,44 +274,23 @@ function ProjectSettings({ store, onClose }) {
     patchProject({ [field]: field === 'seriesId' ? value || null : value })
   }
 
-  const getBackupData = () => {
-    const data = store.getProjectExportData?.(store.activeNovelId)
-    if (!data) return null
-    const prepared = backupConfig.includeMedia ? data : stripMediaFromBackup(data)
-    return {
-      ...prepared,
-      backup: {
-        createdAt: new Date().toISOString(),
-        includeCustomerData: backupConfig.includeCustomerData,
-        source: 'project-settings',
-        config: backupConfig,
-      },
-    }
-  }
-
   const saveBackupConfig = patch => {
     const next = { ...backupConfig, ...patch }
-    const normalized = { ...next, retention: Math.max(1, Math.min(20, Number(next.retention) || BACKUP_DEFAULTS.retention)) }
+    const normalized = { ...next, retention: normalizeRetention(next.retention) }
     setBackupConfig(normalized)
     patchProject({ backupConfig: normalized })
   }
 
   const createLocalBackup = (kind = 'manual') => {
-    const data = getBackupData()
-    if (!data || !store.activeNovelId) return null
-    const entry = {
-      id: `${kind}-${Date.now()}`,
-      kind,
-      createdAt: new Date().toISOString(),
-      title: data.project?.title || 'Untitled project',
-      data,
-    }
+    if (!store.activeNovelId) return null
+    const entry = buildBackupEntry(store.getProjectExportData?.(store.activeNovelId), backupConfig, kind, 'project-settings')
+    if (!entry) return null
     const nextBackups = [entry, ...localBackups].slice(0, backupConfig.retention)
     try {
       writeItem(backupKey(store.activeNovelId), JSON.stringify(nextBackups))
       setLocalBackups(nextBackups)
       patchProject({ backupConfig: { ...backupConfig, lastBackupAt: entry.createdAt } })
-      setBackupMessage(kind === 'auto' ? 'Automatic backup refreshed.' : 'Backup created.')
+      setBackupMessage('Backup created.')
     } catch {
       setBackupMessage('Backup failed. Try reducing retained backups or excluding media.')
       return null
@@ -382,11 +332,6 @@ function ProjectSettings({ store, onClose }) {
     setCategoryDraft(nextDraft)
     patchProject({ categoryOptions: nextOptions })
   }
-
-  useEffect(() => {
-    if (!store.activeNovelId || !shouldCreateAutoBackup(backupConfig, novel?.backupConfig?.lastBackupAt)) return
-    createLocalBackup('auto')
-  }, [store.activeNovelId, backupConfig.frequency]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCoverSelect = async (e) => {
     const file = e.target.files?.[0]
@@ -795,7 +740,7 @@ function ProjectSettings({ store, onClose }) {
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 14 }}>
                   <div>
                     <p style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--text-muted)', marginBottom: 6 }}>Backups</p>
-                    <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Automatic restore-ready snapshots of this project, saved as ZIP files. Use Import ZIP to restore one — they aren't meant to be opened and read.</p>
+                    <p style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>Restore-ready snapshots of this project. Automatic ones (Daily or Weekly) are made in the background and kept on this device only, in this browser or the desktop app. Download one as a ZIP to keep a copy somewhere else, and use Import ZIP to restore it.</p>
                   </div>
                   <button type="button" onClick={() => createLocalBackup('manual')} className="project-settings-small-button">Create backup</button>
                 </div>
@@ -931,6 +876,8 @@ export default function Layout({
   const enabledSectionIds = new Set(getEnabledSections(store.activeNovel))
   // References is its own room, offered to every project type while the `references` flag is on.
   const referencesEnabled = useFeatureFlag('references')
+  // Daily and weekly snapshots are made by the app itself, not only while Project Settings is open.
+  useAutoProjectBackup(store)
   const planningSections = ALL_SECTIONS.filter(s => s.id === 'dashboard' || (s.id === 'references' ? referencesEnabled : enabledSectionIds.has(s.id)))
   const searchSectionIds = useMemo(
     () => (referencesEnabled ? new Set([...enabledSectionIds, 'references']) : enabledSectionIds),
