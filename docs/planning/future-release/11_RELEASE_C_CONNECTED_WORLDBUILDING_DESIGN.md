@@ -37,7 +37,7 @@ Everything stays native and AI-optional (D1 to D11). Each part sits behind its o
 | C1c | ~~Hover preview~~ **Already exists** in the scene editor (see section 2); nothing to build. Aliases get it through the shared lookup. | none | none | done |
 | C1d | Explicit references: extends the Story links panel with Lore, Factions and History groups; remapped on import and merge; cleared on delete. **Built.** | none | `connected_refs` | M |
 | C2 | References as Lore entries with `kind: 'reference'`; URL, source and citation fields; "convert to Lore" | none | `references` | S–M |
-| C3 | `character_knowledge` table, a small panel on a character, rules R17–R18 | one new table (owner-applied) | `character_knowledge` | L |
+| C3 | Character knowledge: a Knowledge tab on a character, rules R17–R18. **Built, with no new table** (see section 11). | none | `character_knowledge` | L |
 | C4 | Canon Explorer over existing links | none | `canon_explorer` | M, only if justified |
 | C5 | Document attachments, paid plans only | storage and scanning decisions | flagged, paid only | L |
 
@@ -107,6 +107,16 @@ Behind the new `references` flag (off for everyone). Real-world sources are stor
 
 Not done: a way to include references in a readable export on request (they are excluded by default as agreed); linking a reference to a scene or record; attachments (C5, on hold). A reference whose project is a series shared record follows lore's series rules.
 
-## 11. Next
+## 11. C3 as built (2026-11-12)
+
+Behind the new `character_knowledge` flag (off for everyone). **Decision change worth knowing:** D20 said "one new table". It was built as a **`knowledge` list on the character record** instead, the same way a character's journey already is. Reason: the journey is a proven precedent (it links scenes and events, is cleaned when they are deleted, syncs, exports, imports and merges with the character), so knowledge reuses all of it. A new table would have needed about 45 changes to sync, backup, import, delete and account switching, plus a migration for you to apply, for a small list per character. Nothing to apply. Cost: two devices editing the same character's knowledge at the same moment get the normal record-conflict review, rather than a per-fact merge.
+
+- **What a writer records:** on a character's new **Knowledge** tab, facts such as "The bridge at Northwatch is mined": the scene and/or event where the character learns it, how (told, saw it, worked it out, read it, other), how sure they are (believes it, knows it is true, believes it but it is false), the scenes where they act on it, and a note. Up to 200 facts per character.
+- **Story Check, only on what was recorded** (never read from the prose): **R17** (possible problem) a character acts on a fact in a scene before the scene where they learn it, reporting the earliest such scene; **R18** (note) a character acts on a fact whose source was never recorded. Only scenes placed in an act count; a flashback or flash-forward is never compared. Dismissals stick. The rules appear in the rules list only while the flag is on.
+- **Safe with the rest of the app:** deleting a scene or event clears it from the facts (the fact and the writer's note stay); project import and AI import point the links at the copied scenes; read-only projects refuse changes. (This also closed a gap: the plot thread and reference writes were not blocked in read-only projects until now.)
+
+Not done: showing who knows what on a scene's Inspector; a "who knows this?" view across characters; counting events in R17 (only scenes are compared).
+
+## 12. Next
 
 C1c needs no work (the hover preview already exists). **C1d** is next, and it extends the existing "Story links" panel (A4) instead of adding a second one: that panel already links characters, places and timeline events to a scene. C1d adds three more groups to it, **Lore entries, Factions and History entries**, stored as `scene.entityRefs`, with suggestions from names and other names in the scene text, removal when the record is deleted, and id remapping on import and merge. Characters, places and events keep their A4 fields, so nothing is stored twice. Behind `connected_refs`.
