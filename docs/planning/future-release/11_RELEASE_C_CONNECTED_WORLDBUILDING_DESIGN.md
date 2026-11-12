@@ -21,7 +21,7 @@ Everything stays native and AI-optional (D1 to D11). Each part sits behind its o
 | --- | --- | --- |
 | Name highlighting in prose | Exists. A map of lowercase text to record for characters (name plus `keywords`), locations, lore and history/timeline titles. A name shared by two records is resolved by whichever was added last, with no warning. Only characters have alternative names. | `Manuscript.jsx` (was inline `entityMap`), `SceneEditor.jsx` `parseSegments` |
 | Chips under "In this scene" | Exist (A4): suggested from the same map, confirmed by the writer into `scene.characterIds` etc. | `ManuscriptInspector.jsx`, `src/utils/sceneLinks.js` |
-| Hover preview | Does not exist. The map already carries a `preview` string for every record, so this is mostly UI. | n/a |
+| Hover preview | **Exists** (corrected 2026-11-12: the first draft of this plan wrongly called it missing). Pointing at a recognised name in the scene editor shows a popover with the record's name, type and summary, plus "Open in side panel". Because it uses the shared name lookup, other names (aliases) get it for free. | `SceneEditor.jsx` `EntityLink`, `.ms-entity-popover` in `src/index.css` |
 | Aliases on locations, lore, history | Do not exist. | n/a |
 | Explicit manuscript references (`entityRefs`) | Do not exist. | n/a |
 | Research / references | Do not exist. Ideas hold text and links but are a different thing. | n/a |
@@ -34,7 +34,7 @@ Everything stays native and AI-optional (D1 to D11). Each part sits behind its o
 | --- | --- | --- | --- | --- |
 | **C1a** | One shared resolver module: aliases on every record type, collision list, exact legacy behaviour. Editor switched to it. | none | none (behaviour-preserving) | S, **built** |
 | C1b | Alias fields in the character, location, lore and history editors; collision warning under the field and in Story Check as an info note | none (additive `aliases[]`) | `connected_refs` | S–M |
-| C1c | Hover preview on recognised names in the editor and the read view. Must not slow large scenes (see risks). | none | `connected_refs` | M |
+| C1c | ~~Hover preview~~ **Already exists** in the scene editor (see section 2); nothing to build. Aliases get it through the shared lookup. | none | none | done |
 | C1d | Explicit references: "Link to…" on a selection or from the Inspector, stored as `scene.entityRefs`; remapped on import and merge; cleared on delete | none | `connected_refs` | M |
 | C2 | References as Lore entries with `kind: 'reference'`; URL, source and citation fields; "convert to Lore" | none | `references` | S–M |
 | C3 | `character_knowledge` table, a small panel on a character, rules R17–R18 | one new table (owner-applied) | `character_knowledge` | L |
@@ -91,4 +91,4 @@ Browser-checked in a scratch copy: field renders, chips add on Enter and comma, 
 
 ## 9. Next
 
-C1c: hover preview on recognised names in the editor and read view.
+C1c needs no work (the hover preview already exists). **C1d** is next, and it extends the existing "Story links" panel (A4) instead of adding a second one: that panel already links characters, places and timeline events to a scene. C1d adds three more groups to it, **Lore entries, Factions and History entries**, stored as `scene.entityRefs`, with suggestions from names and other names in the scene text, removal when the record is deleted, and id remapping on import and merge. Characters, places and events keep their A4 fields, so nothing is stored twice. Behind `connected_refs`.
