@@ -117,6 +117,15 @@ For every row, completion requires: focused regression that fails on the old beh
 | AUD-30 Medium | Site editor loads/saves/publish bound to page + revision; acknowledge only sent draft and ignore stale loads. | Edit during delayed save remains dirty and persists; rapid page switches never cross-save; Publish uses exact confirmed draft. | Medium; client fix initially no migration; marketing copy only. | Locally verified — session/page/revision save ownership, publish lock and stale image callbacks covered. Cross-editor server CAS remains open. |
 | AUD-31 Low | Remove abandoned beta-banner signup callback instead of suppressing lint. | Existing lint gate returns zero errors; behavior unchanged. | Small; no migration or data effect. | Locally verified — unused signup callback/state removed; lint gate has zero errors. |
 
+**AUD-05 plan (agreed 2026-11-12: 30-day hold, reactivation by support email).** Flags `ACCOUNT_LIFECYCLE_DELETE_FREE` / `delete=1` stay off until the staging rehearsal passes.
+1. **Migration (additive):** extend `account_lifecycle_deletions` with `phase` (`held`, `purging`, `completed`), `held_at`, `attempts`, `last_error`. Service-role only, no FK.
+2. **Hold step:** atomic claim (insert-if-absent), live re-check (still Free, same last activity, final notice accepted), then block sign-in (Auth ban) and record `held`. Nothing is deleted.
+3. **Purge step (30+ days later):** re-check again; any sign-in/plan change since the hold cancels it (unban, journal `cancelled`). Otherwise delete the Auth user first (cascades all tables), mark `purging`.
+4. **Orphan sweep:** media and `scenes` cleanup runs after the account is gone, resumable from the journal, safe to retry (media listing is idempotent). A failure at any point leaves either an intact blocked account or an account-less orphan sweep, never a live account missing content.
+5. **Final-notice email wording:** says the account is held 30 days and a reply to support restores it.
+6. **Tests:** fake Supabase with fault injection (Storage fails after batch 1, scenes delete fails, Auth delete fails, sign-in/payment between hold and purge, double claim), per-phase retry.
+7. **Owner:** apply migration, staging dry-run on a throwaway Free account (backdated), then decide whether to switch the flag on. Restore command: unban the user (documented in the recovery runbook).
+
 #### Execution log and Claude handoff
 
 - **2026-11-09 — planning/start:** all 31 findings mapped above. Dedicated `codex/full-audit-remediation-2026-11-09` worktree starts from `40991d3f`; no production access or deployment. First batch owns store/conflict/delete/settings, import/remap, billing aliases/replay checks, routing/lint and optional site-editor sequencing. Codex will replace “implementing” with exact verification and residual acceptance before handing over. Do not concurrently edit those areas until the batch handoff is recorded.
