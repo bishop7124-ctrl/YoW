@@ -28,7 +28,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 const choose = (src) => fireEvent.change(screen.getByLabelText('Choose an existing image'), { target: { value: src } })
 const selectFile = (container) => fireEvent.change(container.querySelector('input[type="file"]'), {
-  target: { files: [new File(['synthetic PNG'], 'sample.png', { type: 'image/png' })] },
+  target: { files: [new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])], 'sample.png', { type: 'image/png' })] },
 })
 
 describe('ImageField asynchronous request ownership', () => {
@@ -111,6 +111,14 @@ describe('ImageField asynchronous request ownership', () => {
     expect(onChange).toHaveBeenCalledExactlyOnceWith({ ...initialValue, src: secondSrc, width: 800, height: 600 })
     expect(storage.getPublicUrl).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Upload new image' }).disabled).toBe(false)
+  })
+
+  it('refuses a file whose bytes are not an image, even when it is named and labelled as one', async () => {
+    const { container } = render(<ImageField value={initialValue} onChange={vi.fn()} ctx={ctx} />)
+    const fake = new File(['<script>alert(1)</script>'], 'evil.png', { type: 'image/png' })
+    await act(async () => { fireEvent.change(container.querySelector('input[type="file"]'), { target: { files: [fake] } }) })
+    expect(storage.upload).not.toHaveBeenCalled()
+    expect(screen.getByText(/not a valid PNG, JPG, WebP or GIF image/)).toBeTruthy()
   })
 
   it('applies a current upload and refreshes the library after its image is measured', async () => {

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { supabase } from '../../supabase'
 import { BUILT_IN_IMAGES } from '../../content/siteImages'
 import { ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, safeFileName } from './fieldTreeUtils'
+import { verifyImageFile } from '../../utils/fileSignature'
 
 const inputStyle = {
   width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)',
@@ -75,10 +76,14 @@ export default function ImageField({ label, value, onChange, ctx }) {
     if (file.size > MAX_IMAGE_BYTES) { setError('That image is over 5 MB. Please compress it first.'); return }
     setBusy(true)
     try {
-      const ext = file.type === 'image/jpeg' ? 'jpg' : file.type.split('/')[1]
+      // The type and name a browser reports are only labels. Check the file's own bytes before it is stored.
+      const checked = await verifyImageFile(file, ALLOWED_IMAGE_TYPES)
+      if (!isCurrent(request)) return
+      if (!checked.ok) { setError('That file is not a valid PNG, JPG, WebP or GIF image.'); return }
+      const ext = checked.type === 'image/jpeg' ? 'jpg' : checked.type.split('/')[1]
       const path = `uploads/${Date.now()}-${safeFileName(file.name)}.${ext}`
       const { error: upErr } = await supabase.storage.from('site-media').upload(path, file, {
-        contentType: file.type, cacheControl: '31536000', upsert: false,
+        contentType: checked.type, cacheControl: '31536000', upsert: false,
       })
       if (!isCurrent(request)) return
       if (upErr) throw upErr
