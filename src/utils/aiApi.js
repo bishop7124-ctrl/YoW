@@ -333,10 +333,12 @@ function parseProviderError(status, data) {
 
 // ── Shared SSE reader ─────────────────────────────────────────────────────────
 
+// Resolves to { sawDone } : whether the provider sent its explicit end-of-stream marker.
 async function readSSE(body, onEvent) {
   const reader  = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
+  let sawDone = false
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
@@ -346,18 +348,24 @@ async function readSSE(body, onEvent) {
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue
       const data = line.slice(6).trim()
-      if (!data || data === '[DONE]') continue
+      if (data === '[DONE]') { sawDone = true; continue }
+      if (!data) continue
       try {
         const stop = onEvent(JSON.parse(data))
-        if (stop) return
+        if (stop) return { sawDone }
       } catch { /* ignore parse errors */ }
     }
   }
+  return { sawDone }
 }
+
+export const STREAM_INCOMPLETE_TEXT = 'The connection ended before the AI finished, so this text may be incomplete.'
+export const STREAM_LENGTH_TEXT = 'The AI reached its length limit, so this text may stop part-way.'
+export const STREAM_BLOCKED_TEXT = 'The AI stopped before finishing (the provider ended the reply early), so this text may be incomplete.'
 
 // ── Provider implementations ──────────────────────────────────────────────────
 
-async function streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onUsage, jsonMode, maxTokens = 4096, signal, promptMetadata, cacheControl }) {
+async function streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onIncomplete, onUsage, jsonMode, maxTokens = 4096, signal, promptMetadata, cacheControl }) {
   try {
     const makeRequest = async (nextCacheControl) => fetch(aiProxyEndpoint(), {
       method: 'POST',
@@ -381,44 +389,66 @@ async function streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, 
       if (!res.ok) return onError(friendlyErrorMessage(err.status, err.message, { provider, metadata: err.metadata, retryAfter: readRetryAfter(res) }))
     }
     let done = false
+    // How the reply ended, from the provider's own words: 'complete', 'length' (hit the output limit),
+    // 'blocked' (the provider ended it early for another reason) or null (no terminal event seen).
+    let ending = null
     const onceDone = () => { if (!done) { done = true; onDone() } }
-    await readSSE(res.body, (parsed) => {
+    const fail = (err) => {
+      done = true
+      onError(friendlyErrorMessage(err.status, err.message, { provider, metadata: err.metadata }))
+    }
+    const usage = (raw) => onUsage?.(normalizeAiUsage(provider, raw, { model, contextMode: promptMetadata?.contextMode }))
+    const result = await readSSE(res.body, (parsed) => {
+      if (done) return true
       if (provider === 'google') {
+        if (parsed.error) { fail(parseProviderError(parsed.error.code || 500, parsed)); return true }
         const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text
         if (text) onChunk(text)
-        if (parsed.usageMetadata) onUsage?.(normalizeAiUsage(provider, parsed.usageMetadata, { model, contextMode: promptMetadata?.contextMode }))
-        if (parsed.candidates?.[0]?.finishReason === 'STOP') { onceDone(); return true }
+        if (parsed.usageMetadata) usage(parsed.usageMetadata)
+        const reason = parsed.candidates?.[0]?.finishReason
+        if (reason === 'STOP') ending = 'complete'
+        else if (reason === 'MAX_TOKENS') ending = 'length'
+        else if (reason) ending = 'blocked'
         return false
       }
       if (provider === 'anthropic') {
+        if (parsed.type === 'error') { fail(parseProviderError(parsed.error?.type || 500, parsed)); return true }
         if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') onChunk(parsed.delta.text)
-        if (parsed.usage) onUsage?.(normalizeAiUsage(provider, parsed.usage, { model, contextMode: promptMetadata?.contextMode }))
-        if (parsed.type === 'message_delta' && parsed.usage) onUsage?.(normalizeAiUsage(provider, parsed.usage, { model, contextMode: promptMetadata?.contextMode }))
-        if (parsed.type === 'message_stop') { onceDone(); return true }
+        if (parsed.usage) usage(parsed.usage)
+        const stopReason = parsed.type === 'message_delta' ? parsed.delta?.stop_reason : null
+        if (stopReason === 'max_tokens') ending = 'length'
+        else if (stopReason === 'refusal') ending = 'blocked'
+        if (parsed.type === 'message_stop') { if (!ending) ending = 'complete'; return true }
         return false
       }
-      if (parsed.error) {
-        const err = parseProviderError(parsed.error.code || 500, parsed)
-        onError(friendlyErrorMessage(err.status, err.message, { provider, metadata: err.metadata }))
-        done = true
-        return true
-      }
-      if (parsed.usage) onUsage?.(normalizeAiUsage(provider, parsed.usage, { model, contextMode: promptMetadata?.contextMode }))
+      if (parsed.error) { fail(parseProviderError(parsed.error.code || 500, parsed)); return true }
+      if (parsed.usage) usage(parsed.usage)
       const text = parsed.choices?.[0]?.delta?.content
       if (text) onChunk(text)
-      if (parsed.choices?.[0]?.finish_reason === 'stop') { onceDone(); return true }
+      const reason = parsed.choices?.[0]?.finish_reason
+      // Keep reading after the finish reason: some providers send the final usage chunk after it.
+      if (reason === 'stop' || reason === 'tool_calls') ending = 'complete'
+      else if (reason === 'length') ending = 'length'
+      else if (reason) ending = 'blocked'
       return false
     })
-    if (!done) onceDone()
+    if (done) return
+    if (!ending && result?.sawDone && provider !== 'google' && provider !== 'anthropic') ending = 'complete'
+    if (ending === 'complete') { onceDone(); return }
+    // No clean ending: never present it as a normal completion.
+    done = true
+    const reason = ending === 'length' ? STREAM_LENGTH_TEXT : ending === 'blocked' ? STREAM_BLOCKED_TEXT : STREAM_INCOMPLETE_TEXT
+    if (onIncomplete) onIncomplete(reason)
+    else onError(reason)
   } catch (e) {
     if (e.name !== 'AbortError') onError(`Couldn't reach the AI provider — check your connection and try again. (${e.message || 'Network error'})`)
   }
 }
 
-export function streamMessage({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onUsage, jsonMode, maxTokens, signal, promptMetadata, cacheControl }) {
+export function streamMessage({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onIncomplete, onUsage, jsonMode, maxTokens, signal, promptMetadata, cacheControl }) {
   if (OFFLINE_MODE)         return mockStreamMessage({ onChunk, onDone, onError })
   if (!apiKey)              return onError('No API key configured.')
-  if (canProxyProvider(provider, baseUrl)) return streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onUsage, jsonMode, maxTokens, signal, promptMetadata, cacheControl })
+  if (canProxyProvider(provider, baseUrl)) return streamViaProxy({ provider, apiKey, model, baseUrl, systemPrompt, messages, onChunk, onDone, onError, onIncomplete, onUsage, jsonMode, maxTokens, signal, promptMetadata, cacheControl })
   if (provider === 'openai') return onError(UNSUPPORTED_ENDPOINT)
   onError(`Unknown provider: ${provider}`)
 }

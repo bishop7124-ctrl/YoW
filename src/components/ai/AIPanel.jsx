@@ -294,6 +294,7 @@ function Message({ msg, onRequestSave, onRetry, streaming }) {
             {savedAs === 'lore' ? 'Saved' : saving === 'lore' ? '…' : 'Lore'}
           </button>
         </div>
+        {!isUser && msg.incomplete && <p role="status" className="text-[11px] text-amber-500 mt-1">{msg.incompleteReason || 'This reply may be incomplete.'}</p>}
         {!isUser && <UsageDetails usage={msg.usage} contextStats={msg.contextStats} />}
       </div>
     </div>
@@ -671,6 +672,17 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
           contextStats: messageContextStats,
           updatedAt: Date.now(),
         })
+      },
+      onIncomplete: (reason) => {
+        if (!run.isCurrent()) return
+        setStreaming(false)
+        // Keep what arrived, but say plainly that it did not finish, and keep the usage seen so far.
+        onUpdate(session.id, {
+          messages: nextMessages.map(m => m.id === assistantMsgId ? { ...m, content: accumulated, streaming: false, incomplete: true, incompleteReason: reason, contextStats: messageContextStats, ...(latestUsage ? { usage: latestUsage } : {}) } : m),
+          updatedAt: Date.now(),
+        })
+        if (latestUsage) onUsage?.(latestUsage)
+        setLiveMessage(null)
       },
       onError: (err) => {
         if (!run.isCurrent()) return

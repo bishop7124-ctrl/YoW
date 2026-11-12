@@ -90,6 +90,8 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
   const suggestionRef = useRef('')
   // What the shown suggestion was written for (scene, highlight, text then), so it is only applied where it still fits.
   const [source, setSource] = useState(null)
+  // Set when the provider ended the reply early or cut it off; replacing text with it is then refused.
+  const [incompleteReason, setIncompleteReason] = useState('')
   // A suggestion still streaming when the panel closes is cancelled, not just ignored.
   useEffect(() => () => runGuard.stop(), [runGuard])
 
@@ -112,6 +114,7 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
     const baseSuggestion = options.append ? suggestionRef.current.trimEnd() : ''
     if (!options.append) {
       setSource(captureSource(activeScene, selectedText))
+      setIncompleteReason('')
       suggestionRef.current = ''
       setSuggestion('')
       if (!options.rewrite) setRewriteProgress(null)
@@ -144,6 +147,18 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
         if (options.rewrite) {
           setRewriteProgress(current => current ? { ...current, completedChunks: options.chunkIndex + 1 } : current)
         }
+      },
+      onIncomplete: reason => {
+        if (!run.isCurrent()) return
+        setStreaming(false)
+        if (options.rewrite) {
+          // An unfinished chunk is rolled back like a failed one, so Retry cannot duplicate or splice a fragment.
+          suggestionRef.current = baseSuggestion
+          setSuggestion(baseSuggestion)
+          setError(`${reason} Try this chunk again.`)
+          return
+        }
+        setIncompleteReason(reason)
       },
       onError: e   => {
         if (!run.isCurrent()) return
@@ -195,8 +210,10 @@ export default function AISuggestionPanel({ activeScene, activeNovel, characters
   // writer has since highlighted something else, and a whole-scene rewrite never replaces a highlight.
   const replacesSelection = Boolean(source ? source.selection : hasSelectedText)
   const appendCheck = suggestion ? checkApply(source, activeScene, selectedText, 'append') : { ok: true }
-  const replaceCheck = suggestion ? checkApply(source, activeScene, selectedText, 'replace') : { ok: true }
-  const clearSuggestion = () => { setSuggestion(''); suggestionRef.current = ''; setRewriteProgress(null); setSource(null) }
+  const replaceCheck = !suggestion ? { ok: true } : incompleteReason
+    ? { ok: false, reason: `${incompleteReason} Insert it, copy it, or generate it again. Replacing is switched off for incomplete text.` }
+    : checkApply(source, activeScene, selectedText, 'replace')
+  const clearSuggestion = () => { setSuggestion(''); suggestionRef.current = ''; setRewriteProgress(null); setSource(null); setIncompleteReason('') }
 
   const handleAppend = () => {
     if (!suggestion.trim() || !activeScene) return

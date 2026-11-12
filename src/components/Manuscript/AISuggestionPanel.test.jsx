@@ -198,3 +198,19 @@ describe('AISuggestionPanel cancellation (audit AUD-07)', () => {
     expect(requests[1].signal.aborted).toBe(true)
   })
 })
+
+describe('AISuggestionPanel incomplete replies (audit AUD-28)', () => {
+  it('shows why, still allows Insert and Copy, but switches Replace off for text the provider cut off', () => {
+    aiConfig.current = { provider: 'openai', apiKey: 'test-key', model: 'test-model' }
+    const requests = []
+    vi.mocked(streamMessage).mockImplementation(request => { requests.push(request) })
+    render(<AISuggestionPanel {...props} />)
+    fireEvent.change(screen.getByPlaceholderText(/Describe what you need/), { target: { value: 'Rewrite it' } })
+    fireEvent.click(screen.getByText('Generate'))
+    act(() => { requests[0].onChunk('Half a para'); requests[0].onIncomplete('The AI reached its length limit, so this text may stop part-way.') })
+    expect(screen.getByText('Half a para')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Replace scene' }).disabled).toBe(true)
+    expect(screen.getByRole('status').textContent).toMatch(/length limit/)
+    expect(screen.getByRole('button', { name: 'Insert at cursor' }).disabled).toBe(false)
+  })
+})
