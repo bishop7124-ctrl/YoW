@@ -31,3 +31,12 @@ export function fitMessagesToInputBudget(messages, systemPrompt, safeInputBudget
 export function estimatePromptTokens(systemPrompt, messages = []) {
   return estimateTokens(systemPrompt) + messages.reduce((sum, message) => sum + estimateTokens(message.content) + 8, 0)
 }
+
+// A plain-language reason when the exact request (system prompt plus kept messages) cannot fit the model's input
+// window, or null when it can. Only checked when the model's limits are known. (Audit AUD-11.)
+export function promptTooLarge(systemPrompt, messages, { contextWindow, limitsKnown } = {}) {
+  if (!limitsKnown || !Number.isFinite(contextWindow) || contextWindow <= 0) return null
+  const tokens = estimatePromptTokens(systemPrompt, messages)
+  if (tokens <= contextWindow) return null
+  return `This request is too large for the selected model (about ${tokens.toLocaleString()} tokens, and it can take ${contextWindow.toLocaleString()}). Choose less context, or shorten your message, and try again. Nothing was sent.`
+}

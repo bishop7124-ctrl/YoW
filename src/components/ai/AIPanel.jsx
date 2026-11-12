@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import { promptTooLarge } from '../../utils/aiConversation'
 import { createRunGuard } from '../../utils/aiRunGuard'
 import { streamMessage, buildSystemPrompt, PROVIDERS } from '../../utils/aiApi'
 import { AI_SETTINGS_EVENT, DEFAULT_AI_SETTINGS, loadAiSettings } from '../../utils/aiSettings'
@@ -578,6 +579,15 @@ function ChatView({ session, store, aiSettings, onUpdate, onBack, onPin, onSetCa
     )
     const summarizedMessages = summarizeOlderConversation(apiMessages)
     const fittedMessages = fitMessagesToInputBudget(summarizedMessages, systemPrompt, builtContext.safeInputBudget)
+    // The exact prompt about to be sent (instructions, context and messages together) must fit the model.
+    const tooLarge = promptTooLarge(systemPrompt, fittedMessages, builtContext)
+    if (tooLarge) {
+      onUpdate(session.id, {
+        messages: nextMessages.map(m => m.id === assistantMsgId ? { ...m, content: tooLarge, streaming: false, error: true } : m),
+        updatedAt: Date.now(),
+      })
+      return
+    }
     const contextWarnings = fittedMessages.length < apiMessages.length
       ? [...builtContext.warnings, 'Older chat history was omitted so this request stays within the selected model budget.']
       : builtContext.warnings

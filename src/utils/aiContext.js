@@ -460,15 +460,17 @@ export function buildAIContext({
   ].filter(Boolean)
   const stableFingerprint = fingerprintText(`${provider}:${model}:${selected.effectiveMode}:${stableContext}`)
   const contextFingerprint = fingerprintText(`${stableFingerprint}:${requestContext}:${customInstruction || ''}`)
+  // When the context had to be cut to fit the model, only the cut text may be sent. The separate stable and request
+  // sections are the uncut originals, and the prompt builder prefers them, so they are withheld (audit AUD-11).
   return {
     context: capped.text,
-    stableContext,
-    requestContext,
+    stableContext: capped.truncated ? '' : stableContext,
+    requestContext: capped.truncated ? '' : requestContext,
     stableFirst: true,
     stableFingerprint,
     contextFingerprint,
     cache: {
-      eligible: capabilities.supportsPromptCaching && estimateTokens(stableContext) >= capabilities.cacheMinTokens,
+      eligible: !capped.truncated && capabilities.supportsPromptCaching && estimateTokens(stableContext) >= capabilities.cacheMinTokens,
       behavior: capabilities.cacheBehavior,
       minTokens: capabilities.cacheMinTokens,
     },

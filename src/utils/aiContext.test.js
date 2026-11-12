@@ -93,6 +93,22 @@ describe('buildAIContext', () => {
     expect(result.truncated).toBe(true)
   })
 
+  it('withholds the uncut sections once the context had to be cut, so only the capped text can be sent (audit AUD-11)', () => {
+    const hugeContent = 'Mira discovers a secret. '.repeat(5000)
+    const big = buildAIContext({
+      store: makeStore({ scenes: Array.from({ length: 300 }, (_, index) => ({ id: `scene-${index}`, title: `Scene ${index}`, novelId: 'novel-1', chapterId: 'chapter-1', order: index, content: hugeContent })) }),
+      mode: 'entire_project', provider: 'openrouter', model: 'deepseek/deepseek-r1',
+    })
+    expect(big.truncated).toBe(true)
+    expect(big.stableContext).toBe('')
+    expect(big.requestContext).toBe('')
+    expect(big.cache.eligible).toBe(false)
+    expect(big.context.length).toBeGreaterThan(1000)
+    const small = buildAIContext({ store: makeStore(), userPrompt: 'Mira orchard' })
+    expect(small.truncated).toBe(false)
+    expect(small.stableContext.length).toBeGreaterThan(0)
+  })
+
   it('changing model changes the available context budget', () => {
     const small = getSafeInputBudget('openrouter', 'deepseek/deepseek-r1').safeInputBudget
     const large = getSafeInputBudget('anthropic', 'claude-sonnet-4-6').safeInputBudget
