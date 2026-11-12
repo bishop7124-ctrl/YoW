@@ -932,6 +932,11 @@ export default function Layout({
   // References is its own room, offered to every project type while the `references` flag is on.
   const referencesEnabled = useFeatureFlag('references')
   const planningSections = ALL_SECTIONS.filter(s => s.id === 'dashboard' || (s.id === 'references' ? referencesEnabled : enabledSectionIds.has(s.id)))
+  const searchSectionIds = useMemo(
+    () => (referencesEnabled ? new Set([...enabledSectionIds, 'references']) : enabledSectionIds),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [referencesEnabled, store.activeNovel?.enabledSections, store.activeNovel?.type],
+  )
   const isFreePlan = membership?.isFree
   const isSectionLockedForFree = useCallback(
     (sectionId) => Boolean(isFreePlan && FREE_LOCKED_SECTIONS.has(sectionId)),
@@ -1005,7 +1010,8 @@ export default function Layout({
         (meta && !event.shiftKey && !event.altKey && key === 'k' && viewMode !== 'writing') ||
         (!meta && !event.altKey && event.key === '/' && !typing)
       // References drawer: "R" outside text fields, from any room (only while the flag is on).
-      if (!wantsSearch && referencesEnabled && !meta && !event.altKey && !event.shiftKey && key === 'r' && !typing) {
+      const inDialog = Boolean(target?.closest?.('[role="dialog"], dialog'))
+      if (!wantsSearch && referencesEnabled && !meta && !event.altKey && !event.shiftKey && key === 'r' && !typing && !inDialog) {
         event.preventDefault()
         setReferencesOpen(open => !open)
         return
@@ -1318,7 +1324,7 @@ export default function Layout({
 
       {searchOpen && (
         <Suspense fallback={null}>
-          <GlobalSearch store={store} enabledSectionIds={referencesEnabled ? new Set([...enabledSectionIds, 'references']) : enabledSectionIds} onClose={() => setSearchOpen(false)} />
+          <GlobalSearch store={store} enabledSectionIds={searchSectionIds} onClose={() => setSearchOpen(false)} />
         </Suspense>
       )}
 

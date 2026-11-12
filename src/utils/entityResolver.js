@@ -102,14 +102,18 @@ const LIST_BY_SECTION = ['characters', 'locations', 'factions', 'loreEntries', '
 // For a record being edited: which of the given texts (its name, its draft aliases) are already used by ANOTHER record?
 // `self` is { list, id } naming the record being edited (omit id for a new record). Returns
 // [{ text, others: [entity, ...] }], one per clashing text, in the order given.
-export function clashesForTexts(data = {}, self = {}, texts = []) {
+export function buildClashIndex(data = {}, self = {}) {
   const others = {}
   const alsoIds = new Set(self.alsoIds || []) // the record's own counterpart, e.g. the timeline event linked to a history entry
   for (const list of LIST_BY_SECTION) {
     others[list] = (data[list] || []).filter(record => !(self.id && self.list === list && record.id === self.id)
       && !((list === 'worldHistory' || list === 'timeline') && alsoIds.has(record.id)))
   }
-  const { byText } = buildEntityIndex(others)
+  return buildEntityIndex(others).byText
+}
+
+// The lookup half, cheap enough to run on every keystroke once the index above has been built for the form.
+export function clashesFromIndex(byText, texts = []) {
   const out = []
   const seen = new Set()
   for (const raw of texts) {
@@ -117,11 +121,13 @@ export function clashesForTexts(data = {}, self = {}, texts = []) {
     const key = text.toLowerCase()
     if (text.length < MIN_REFERENCE_LENGTH || seen.has(key)) continue
     seen.add(key)
-    const entities = byText.get(key)
+    const entities = byText?.get(key)
     if (entities?.length) out.push({ text, others: entities })
   }
   return out
 }
+
+export const clashesForTexts = (data, self, texts) => clashesFromIndex(buildClashIndex(data, self), texts)
 
 // The collisions that involve one record, each with the OTHER records sharing the text.
 export function collisionsForRecord(index, section, id) {

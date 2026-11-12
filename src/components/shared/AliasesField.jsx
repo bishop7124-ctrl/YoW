@@ -1,13 +1,19 @@
-import { useId, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useFeatureFlag } from '../../utils/useFeatureFlag'
-import { MAX_ALIASES_PER_RECORD, clashesForTexts, parseAliasText, recordAliases } from '../../utils/entityResolver'
+import { MAX_ALIASES_PER_RECORD, buildClashIndex, clashesFromIndex, parseAliasText, recordAliases } from '../../utils/entityResolver'
 
 // The warning lines on their own, for editors that already have their own alias input (characters keep their
 // existing "Alias / Keywords" field). Shown only while the flag is on.
 export function AliasClashNotes({ texts, data, self }) {
   const enabled = useFeatureFlag('connected_refs')
+  // The index of every other record's names is built once per change to the project's lists (not per keystroke).
+  const index = useMemo(
+    () => (enabled ? buildClashIndex(data, self) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [enabled, data?.characters, data?.locations, data?.factions, data?.loreEntries, data?.worldHistory, data?.timeline, self?.list, self?.id, (self?.alsoIds || []).join('|')],
+  )
   if (!enabled) return null
-  return clashesForTexts(data, self, texts).map(({ text, others }) => (
+  return clashesFromIndex(index, texts).map(({ text, others }) => (
     <p key={text.toLowerCase()} role="status" className="text-xs text-[var(--warning,#b45309)]">
       “{text}” is also used by {others.map(o => `${o.name} (${o.sectionLabel.toLowerCase()})`).join(', ')}. The manuscript can link that name to only one of them.
     </p>

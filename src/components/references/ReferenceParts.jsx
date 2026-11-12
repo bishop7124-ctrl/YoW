@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { safeSourceUrl, sourceHost } from '../../utils/references'
 
 const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
@@ -6,6 +6,7 @@ const LABEL = 'block form-label mb-1.5'
 
 // Add or edit a reference: a title, where it came from, how to cite it, and the writer's own notes.
 export function ReferenceForm({ initial, onSave, onCancel }) {
+  const uid = useId()
   const [form, setForm] = useState(() => ({
     title: initial?.title || '',
     sourceUrl: initial?.sourceUrl || '',
@@ -33,24 +34,24 @@ export function ReferenceForm({ initial, onSave, onCancel }) {
   return (
     <form data-confirms-save onSubmit={submit} className="space-y-4 text-left" aria-label={initial ? 'Edit reference' : 'New reference'}>
       <div>
-        <label htmlFor="ref-title" className={LABEL}>Title</label>
-        <input id="ref-title" className={INPUT} value={form.title} onChange={set('title')} placeholder="e.g. Medieval grain storage" required autoFocus />
+        <label htmlFor={`${uid}-title`} className={LABEL}>Title</label>
+        <input id={`${uid}-title`} className={INPUT} value={form.title} onChange={set('title')} placeholder="e.g. Medieval grain storage" required autoFocus />
       </div>
       <div>
-        <label htmlFor="ref-url" className={LABEL}>Source link</label>
-        <input id="ref-url" className={INPUT} value={form.sourceUrl} onChange={set('sourceUrl')} placeholder="https://" inputMode="url" />
+        <label htmlFor={`${uid}-url`} className={LABEL}>Source link</label>
+        <input id={`${uid}-url`} className={INPUT} value={form.sourceUrl} onChange={set('sourceUrl')} placeholder="https://" inputMode="url" />
       </div>
       <div>
-        <label htmlFor="ref-citation" className={LABEL}>Citation</label>
-        <input id="ref-citation" className={INPUT} value={form.citation} onChange={set('citation')} placeholder="Author, title, year" />
+        <label htmlFor={`${uid}-citation`} className={LABEL}>Citation</label>
+        <input id={`${uid}-citation`} className={INPUT} value={form.citation} onChange={set('citation')} placeholder="Author, title, year" />
       </div>
       <div>
-        <label htmlFor="ref-notes" className={LABEL}>Notes</label>
-        <textarea id="ref-notes" className={`${INPUT} resize-none h-40`} value={form.content} onChange={set('content')} placeholder="What you learned, quotes, what to check later" />
+        <label htmlFor={`${uid}-notes`} className={LABEL}>Notes</label>
+        <textarea id={`${uid}-notes`} className={`${INPUT} resize-none h-40`} value={form.content} onChange={set('content')} placeholder="What you learned, quotes, what to check later" />
       </div>
       <div>
-        <label htmlFor="ref-tags" className={LABEL}>Tags</label>
-        <input id="ref-tags" className={INPUT} value={form.tags} onChange={set('tags')} placeholder="Separate with commas" />
+        <label htmlFor={`${uid}-tags`} className={LABEL}>Tags</label>
+        <input id={`${uid}-tags`} className={INPUT} value={form.tags} onChange={set('tags')} placeholder="Separate with commas" />
       </div>
       {error && <p role="alert" className="text-sm text-[var(--danger,#dc2626)]">{error}</p>}
       <div className="flex gap-2 justify-end">

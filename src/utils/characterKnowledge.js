@@ -13,10 +13,10 @@
 //   note, createdAt, updatedAt
 // }
 
-export const MAX_FACTS_PER_CHARACTER = 200
+export const MAX_FACTS_PER_CHARACTER = 100
 export const MAX_FACT_TEXT = 500
-export const MAX_FACT_NOTE = 1000
-export const MAX_USED_SCENES = 100
+export const MAX_FACT_NOTE = 500
+export const MAX_USED_SCENES = 50
 
 export const KNOWLEDGE_VIA = [
   { value: '', label: 'Not recorded' },

@@ -14,9 +14,24 @@ export default function ReferencesDrawer({ store, onClose, onOpenRoom }) {
   const open = referenceEntries.find(entry => entry.id === openId) || null
   const locked = Boolean(store.readOnly)
 
-  useEffect(() => { searchRef.current?.focus() }, [])
+  const drawerRef = useRef(null)
+  // Focus moves into the drawer on open and goes back to whatever opened it on close.
   useEffect(() => {
-    const onKey = event => { if (event.key === 'Escape') { event.stopPropagation(); onClose() } }
+    const opener = document.activeElement
+    searchRef.current?.focus()
+    return () => { if (opener && typeof opener.focus === 'function' && document.contains(opener)) opener.focus() }
+  }, [])
+  useEffect(() => {
+    const onKey = event => {
+      if (event.key === 'Escape') { event.stopPropagation(); onClose(); return }
+      if (event.key !== 'Tab') return
+      // Keep Tab inside the drawer while it is open.
+      const focusable = [...(drawerRef.current?.querySelectorAll('button, input, select, textarea, a[href]') || [])].filter(el => !el.disabled && el.tabIndex >= 0)
+      if (!focusable.length) return
+      const first = focusable[0], last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
     document.addEventListener('keydown', onKey, true)
     return () => document.removeEventListener('keydown', onKey, true)
   }, [onClose])
@@ -24,7 +39,7 @@ export default function ReferencesDrawer({ store, onClose, onOpenRoom }) {
   return (
     <div className="refs-drawer-layer">
       <button type="button" className="refs-drawer-backdrop" aria-label="Close references" onClick={onClose} tabIndex={-1} />
-      <aside className="refs-drawer font-sans" role="dialog" aria-label="References" data-testid="references-drawer">
+      <aside ref={drawerRef} className="refs-drawer font-sans" role="dialog" aria-modal="true" aria-label="References" data-testid="references-drawer">
         <header className="refs-drawer-head">
           <h2>References</h2>
           <div className="refs-drawer-actions">
