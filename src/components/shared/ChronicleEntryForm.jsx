@@ -1,6 +1,8 @@
 import { useId, useMemo, useState } from 'react'
 import { findEraForYear, formatTimelineDate, getTimelineYear, parseTimelineYear, parseYearInput, sortTimelineEras } from '../../utils/timelineYear'
 import { createEraLookup, resolveTimelineEra, uniqueTimelineValues } from '../../utils/timelineEntries'
+import AliasesField from './AliasesField'
+import { recordAliases, withAliasField } from '../../utils/entityResolver'
 
 const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
@@ -11,6 +13,7 @@ export default function ChronicleEntryForm({
   characters = [],
   locations = [],
   eras = [],
+  aliasData,
   onSave,
   onCancel,
 }) {
@@ -31,6 +34,7 @@ export default function ChronicleEntryForm({
     tags: uniqueTimelineValues(initial?.tags),
     linkedCharacters: uniqueTimelineValues(initial?.linkedCharacters),
     linkedLocations: uniqueTimelineValues(initial?.linkedLocations),
+    aliases: recordAliases(initial || {}),
   }))
   const [tagInput, setTagInput] = useState('')
   const [eraManuallySet, setEraManuallySet] = useState(Boolean(initial && (Object.hasOwn(initial, 'eraId') || initial.era)))
@@ -79,8 +83,9 @@ export default function ChronicleEntryForm({
     const historyDate = startYear === getTimelineYear(initial || {}) && endYear === parseYearInput(initial?.endYear)
       ? initialDate || String(startYear ?? '')
       : String(startYear ?? '')
-    const saved = onSave({
+    const saved = onSave(withAliasField({
       title: form.title.trim(),
+      aliases: form.aliases,
       // worldhistory uses startYear/endYear; timeline uses free-text date, but we
       // still derive a numeric startYear from it so sort/display order (which
       // prioritizes startYear when present) stays in sync with what was typed.
@@ -97,7 +102,7 @@ export default function ChronicleEntryForm({
       tags: uniqueTimelineValues([...form.tags, tagInput.trim()]),
       linkedCharacters: form.linkedCharacters,
       linkedLocations: form.linkedLocations,
-    })
+    }, initial))
     if (saved === false || saved === null) setError('This entry could not be saved. Your draft is still here.')
     else e.currentTarget.dispatchEvent(new CustomEvent('studio-form-saved', { bubbles: true }))
   }
@@ -109,6 +114,8 @@ export default function ChronicleEntryForm({
         <label htmlFor={`${fieldId}-title`} className={LABEL}>Title *</label>
         <input id={`${fieldId}-title`} value={form.title} onChange={field('title')} className={INPUT} required />
       </div>
+      <AliasesField value={form.aliases} onChange={aliases => setForm(prev => ({ ...prev, aliases }))} ownName={form.title} data={aliasData}
+        self={{ list: isWorldHistory ? 'worldHistory' : 'timeline', id: initial?.id, alsoIds: [initial?.timelineEventId, initial?.worldHistoryEntryId].filter(Boolean) }} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>

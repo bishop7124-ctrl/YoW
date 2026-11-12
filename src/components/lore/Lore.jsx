@@ -3,17 +3,19 @@ import Modal from '../shared/Modal'
 import { StudioSplit, StudioIndex, StudioRecord, StudioDetail, StudioButton, StudioEmpty, StudioPageHeader, StudioNote } from '../presentation/Studio'
 import { buildLoreTagIndex, createLoreReferenceIndex, groupLoreEntries, loreCategory, loreTagKey, loreTagLabel, normalizeLoreEntry, normalizeLoreTags, relatedLoreFor } from '../../utils/loreEntries'
 import { UserMediaImage } from '../shared/UserMedia'
+import AliasesField from '../shared/AliasesField'
+import { aliasDataFromStore, recordAliases, withAliasField } from '../../utils/entityResolver'
 
 const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
 
 const SUGGESTED_CATEGORIES = ['Magic System', 'Religion', 'History', 'Politics', 'Geography', 'Culture', 'Technology', 'Prophecy', 'Mythology', 'Other']
 
-function EntryForm({ entry, onSave, onCancel, characters, locations, loreEntries, existingCategories, existingTags, configuredCategories }) {
+function EntryForm({ entry, onSave, onCancel, characters, locations, loreEntries, existingCategories, existingTags, configuredCategories, aliasData }) {
   const fieldId = useId()
   const [form, setForm] = useState(() => {
     const { title, category, content, characterIds, locationIds, loreIds, tags } = normalizeLoreEntry(entry || {})
-    return { title, category, content, characterIds, locationIds, loreIds, tags }
+    return { title, category, content, characterIds, locationIds, loreIds, tags, aliases: recordAliases(entry || {}) }
   })
   const [tagInput, setTagInput] = useState('')
   const [error, setError] = useState('')
@@ -41,7 +43,7 @@ function EntryForm({ entry, onSave, onCancel, characters, locations, loreEntries
     <form data-confirms-save onChange={() => setError('')} onSubmit={e => {
       e.preventDefault()
       if (!form.title.trim()) { setError('Enter a title for this lore entry.'); return }
-      const saved = onSave({ ...form, title: form.title.trim(), category: form.category.trim(), tags: normalizeLoreTags([...form.tags, tagInput.replace(/,$/, '')]) })
+      const saved = onSave(withAliasField({ ...form, title: form.title.trim(), category: form.category.trim(), tags: normalizeLoreTags([...form.tags, tagInput.replace(/,$/, '')]) }, entry))
       if (!saved) setError('This entry could not be saved. Your draft is still here.')
       else e.currentTarget.dispatchEvent(new CustomEvent('studio-form-saved', { bubbles: true }))
     }} className="space-y-4 text-left">
@@ -49,6 +51,7 @@ function EntryForm({ entry, onSave, onCancel, characters, locations, loreEntries
         <label htmlFor={`${fieldId}-title`} className={LABEL}>Title</label>
         <input id={`${fieldId}-title`} className={INPUT} value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="e.g. The Binding Laws" required />
       </div>
+      <AliasesField value={form.aliases} onChange={aliases => setForm(p => ({ ...p, aliases }))} ownName={form.title} data={aliasData} self={{ list: 'loreEntries', id: entry?.id }} />
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
@@ -313,6 +316,7 @@ function LoreWorkspace({ store }) {
           <EntryForm
             key={editTarget?.id || 'new'}
             entry={editTarget}
+            aliasData={aliasDataFromStore(store)}
             onSave={handleSave}
             onCancel={closeForm}
             characters={characters}

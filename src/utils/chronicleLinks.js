@@ -1,7 +1,7 @@
 const aliases = [
   ['title'], ['era'], ['eraId'], ['date', 'dateRange'],
   ['description', 'content'], ['type', 'category'], ['tags'],
-  ['startYear'], ['endYear'], ['linkedCharacters'], ['linkedLocations'],
+  ['startYear'], ['endYear'], ['linkedCharacters'], ['linkedLocations'], ['aliases'],
 ]
 
 // Mirror only fields present in the patch. Omitted properties preserve the

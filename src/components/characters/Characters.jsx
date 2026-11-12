@@ -17,6 +17,8 @@ import CharacterJourney from './CharacterJourney'
 import CharacterInterview from '../aitools/CharacterInterview'
 import { AIToolsUpgradeWall } from '../aitools/AITools'
 import AIStar from '../ai/AIStar'
+import { AliasClashNotes } from '../shared/AliasesField'
+import { aliasDataFromStore } from '../../utils/entityResolver'
 
 const INPUT = 'field w-full px-3 py-2 text-base placeholder:text-[var(--text-muted)]'
 const LABEL = 'block form-label mb-1.5'
@@ -749,6 +751,7 @@ function CharacterForm({ initial, onSave, onCancel, factions, characters, curren
                 onKeyDown={addKeyword}
                 placeholder="e.g. The Raven, Lord Blackwood..."
               />
+              <AliasClashNotes texts={[form.name, ...form.keywords]} data={aliasDataFromStore(store)} self={{ list: 'characters', id: initial?.id }} />
             </div>
 
             {/* Portrait */}

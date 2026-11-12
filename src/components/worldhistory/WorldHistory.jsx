@@ -6,6 +6,7 @@ import EraManager from './EraManager'
 import { formatTimelineDate, sortTimelineEras } from '../../utils/timelineYear'
 import { createEraLookup, groupTimelineEntries, matchesTimelineSearch, resolveTimelineEra } from '../../utils/timelineEntries'
 import { buildHistoryEntries } from '../../utils/historyEntries'
+import { aliasDataFromStore } from '../../utils/entityResolver'
 
 export default function WorldHistory({ store }) {
   return <HistoryWorkspace key={store.activeNovelId || 'history'} store={store} />
@@ -207,6 +208,7 @@ function HistoryWorkspace({ store }) {
             characters={characters}
             locations={locations}
             eras={eras}
+            aliasData={aliasDataFromStore(store)}
             onSave={handleSave}
             onCancel={closeForm}
           />

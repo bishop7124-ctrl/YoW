@@ -2,11 +2,13 @@ import { useState } from 'react'
 import Modal from '../shared/Modal'
 import FactionLogo from './FactionLogo'
 import LogoEditorModal from './LogoEditorModal'
+import AliasesField from '../shared/AliasesField'
+import { aliasDataFromStore, recordAliases, withAliasField } from '../../utils/entityResolver'
 
 const INPUT = 'w-full bg-[var(--bg-main)] border border-[var(--border)] rounded px-3 py-2 text-base text-[var(--text-main)] focus:border-[var(--accent)] outline-none transition-colors'
 const LABEL = 'block text-xs text-[var(--text-muted)] uppercase tracking-widest mb-1.5'
 
-const emptyForm = () => ({ name: '', logo: [], description: '' })
+const emptyForm = () => ({ name: '', logo: [], description: '', aliases: [] })
 const getMemberRoles = (faction) => faction?.memberRoles && typeof faction.memberRoles === 'object' ? faction.memberRoles : {}
 
 export default function Factions({ store, initialEntryId = null }) {
@@ -41,7 +43,7 @@ export default function Factions({ store, initialEntryId = null }) {
   const openEdit = (e, faction) => {
     e?.stopPropagation()
     setEditTarget(faction)
-    setForm({ name: faction.name, logo: faction.logo || [], description: faction.description || '' })
+    setForm({ name: faction.name, logo: faction.logo || [], description: faction.description || '', aliases: recordAliases(faction) })
     setShowForm(true)
   }
 
@@ -50,7 +52,7 @@ export default function Factions({ store, initialEntryId = null }) {
     // The replaced logo is removed by the store only after this save succeeds (and only if no other
     // record uses it); deleting it here first left the faction pointing at a deleted image whenever
     // the save was refused.
-    const faction = saveFaction(form, editTarget?.id)
+    const faction = saveFaction(withAliasField(form, editTarget), editTarget?.id)
     store.refreshStorageUsedBytes?.().catch(console.error)
     if (!faction) return // blocked (e.g. cloud storage full) — keep the form open so nothing is lost
     if (faction.id && selectedFactionId) setSelectedFactionId(faction.id)
@@ -253,6 +255,7 @@ export default function Factions({ store, initialEntryId = null }) {
               <label className={LABEL}>Faction Name</label>
               <input className={INPUT} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} required />
             </div>
+            <AliasesField value={form.aliases} onChange={aliases => setForm(f => ({ ...f, aliases }))} ownName={form.name} data={aliasDataFromStore(store)} self={{ list: 'factions', id: editTarget?.id }} />
             <div>
               <label className={LABEL}>Description</label>
               <textarea className={`${INPUT} h-32 resize-none`} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />

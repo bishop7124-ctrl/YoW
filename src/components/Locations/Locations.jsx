@@ -5,6 +5,8 @@ import { loreRefsFor, timelineRefsFor } from '../../utils/worldLinks'
 import { loadValue, writeItem } from '../../storage/projectStorage'
 import { uploadUserMedia, deleteUserMedia } from '../../utils/uploadUserMedia'
 import { UserMediaImage } from '../shared/UserMedia'
+import AliasesField from '../shared/AliasesField'
+import { aliasDataFromStore, recordAliases, withAliasField } from '../../utils/entityResolver'
 
 function removeLocationFromAllMaps(locationId) {
   const maps = loadValue('nf_maps_list', []);
@@ -42,6 +44,7 @@ function LocationForm({ initial, onSave, onCancel, store }) {
     description: initial?.description ?? '',
     tags: initial?.tags ?? [],
     image: initial?.image ?? '',
+    aliases: recordAliases(initial || {}),
   })
   const [tagInput, setTagInput] = useState('')
   const [imageError, setImageError] = useState('')
@@ -95,7 +98,7 @@ function LocationForm({ initial, onSave, onCancel, store }) {
   }
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSave(form) }} className="space-y-4 text-left">
+    <form onSubmit={(e) => { e.preventDefault(); onSave(withAliasField(form, initial)) }} className="space-y-4 text-left">
       <div>
         <label className="form-label">Photo</label>
         {form.image ? (
@@ -120,6 +123,7 @@ function LocationForm({ initial, onSave, onCancel, store }) {
         <label className="form-label">Name</label>
         <input value={form.name} onChange={e=>setForm(p=>({...p, name:e.target.value}))} className={IN} required />
       </div>
+      <AliasesField value={form.aliases} onChange={aliases => setForm(p => ({ ...p, aliases }))} ownName={form.name} data={aliasDataFromStore(store)} self={{ list: 'locations', id: initial?.id }} />
       <div>
         <label className="form-label">Category</label>
         <select value={form.category} onChange={e=>setForm(p=>({...p, category:e.target.value}))} className={IN}>

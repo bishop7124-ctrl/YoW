@@ -3,6 +3,7 @@ import Modal from '../shared/Modal'
 import ChronicleEntryForm from '../shared/ChronicleEntryForm'
 import { formatTimelineDate, sortTimelineEras } from '../../utils/timelineYear'
 import { buildTimelineEntries, groupTimelineEntries, matchesTimelineSearch } from '../../utils/timelineEntries'
+import { aliasDataFromStore } from '../../utils/entityResolver'
 
 export default function Timeline({ store }) {
   const {
@@ -318,6 +319,7 @@ export default function Timeline({ store }) {
             characters={characters}
             locations={locations}
             eras={eras}
+            aliasData={aliasDataFromStore(store)}
             onSave={handleSave}
             onCancel={() => setFormState(null)}
           />

@@ -61,28 +61,66 @@ const SOURCES = [
 // Records are expected to be the active project's already.
 export function buildEntityIndex(data = {}) {
   const map = {}
-  const owners = new Map() // key -> Map(entityId -> entity), in first-seen order
-  const put = (text, entity) => {
+  const owners = new Map() // key -> Map(group -> entity), in first-seen order
+  const put = (text, entity, group) => {
     const trimmed = clean(text)
     if (trimmed.length < MIN_REFERENCE_LENGTH) return
     const key = trimmed.toLowerCase()
     map[key] = entity
     if (!owners.has(key)) owners.set(key, { text: trimmed, entities: new Map() })
-    owners.get(key).entities.set(`${entity.section}:${entity.id}`, entity)
+    if (!owners.get(key).entities.has(group)) owners.get(key).entities.set(group, entity)
+  }
+  // A history entry and the timeline event linked to it are one chronicle record shown in two places, so they
+  // share a group and never count as a clash with each other.
+  const eventGroup = new Map((data.worldHistory || []).filter(entry => entry?.timelineEventId).map(entry => [entry.timelineEventId, `chronicle:${entry.id}`]))
+  const groupOf = (source, record) => {
+    if (source.list === 'worldHistory') return `chronicle:${record.id}`
+    if (source.list === 'timeline') return eventGroup.get(record.id) || (record.worldHistoryEntryId ? `chronicle:${record.worldHistoryEntryId}` : `${source.section}:${record.id}`)
+    return `${source.list}:${record.id}`
   }
   for (const source of SOURCES) {
     for (const record of data[source.list] || []) {
       const name = record?.[source.nameField]
       const entity = { id: record.id, section: source.section, sectionLabel: source.label, name, preview: source.preview(record) }
-      put(name, entity)
-      recordAliases(record, source.extra).forEach(alias => put(alias, entity))
+      const group = groupOf(source, record)
+      put(name, entity, group)
+      recordAliases(record, source.extra).forEach(alias => put(alias, entity, group))
     }
   }
   const collisions = []
+  const byText = new Map() // lowercase text -> every record that answers to it
   for (const [key, info] of owners) {
-    if (info.entities.size > 1) collisions.push({ key, text: info.text, entities: [...info.entities.values()] })
+    const entities = [...info.entities.values()]
+    byText.set(key, entities)
+    if (entities.length > 1) collisions.push({ key, text: info.text, entities })
   }
-  return { map, collisions }
+  return { map, collisions, byText }
+}
+
+const LIST_BY_SECTION = ['characters', 'locations', 'factions', 'loreEntries', 'worldHistory', 'timeline']
+
+// For a record being edited: which of the given texts (its name, its draft aliases) are already used by ANOTHER record?
+// `self` is { list, id } naming the record being edited (omit id for a new record). Returns
+// [{ text, others: [entity, ...] }], one per clashing text, in the order given.
+export function clashesForTexts(data = {}, self = {}, texts = []) {
+  const others = {}
+  const alsoIds = new Set(self.alsoIds || []) // the record's own counterpart, e.g. the timeline event linked to a history entry
+  for (const list of LIST_BY_SECTION) {
+    others[list] = (data[list] || []).filter(record => !(self.id && self.list === list && record.id === self.id)
+      && !((list === 'worldHistory' || list === 'timeline') && alsoIds.has(record.id)))
+  }
+  const { byText } = buildEntityIndex(others)
+  const out = []
+  const seen = new Set()
+  for (const raw of texts) {
+    const text = clean(raw)
+    const key = text.toLowerCase()
+    if (text.length < MIN_REFERENCE_LENGTH || seen.has(key)) continue
+    seen.add(key)
+    const entities = byText.get(key)
+    if (entities?.length) out.push({ text, others: entities })
+  }
+  return out
 }
 
 // The collisions that involve one record, each with the OTHER records sharing the text.
@@ -93,4 +131,22 @@ export function collisionsForRecord(index, section, id) {
       text: collision.text,
       others: collision.entities.filter(entity => !(entity.section === section && entity.id === id)),
     }))
+}
+
+// The project's lists a form needs for clash warnings, picked from the store (missing lists become empty).
+export const aliasDataFromStore = store => ({
+  characters: store?.characters || [],
+  locations: store?.locations || [],
+  factions: store?.factions || [],
+  loreEntries: store?.loreEntries || [],
+  worldHistory: store?.worldHistory || [],
+  timeline: store?.timeline || [],
+})
+
+// A form's payload without an empty `aliases` list when the record never had one, so saving a record the writer
+// gave no other names to does not add an empty field to it (and nothing changes at all while the feature is off).
+export function withAliasField(payload, initial) {
+  const next = { ...payload }
+  if (!Array.isArray(next.aliases) || (!next.aliases.length && !Object.hasOwn(initial || {}, 'aliases'))) delete next.aliases
+  return next
 }

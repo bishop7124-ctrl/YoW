@@ -1,5 +1,6 @@
 import { resolveHistorySceneId } from '../../utils/historyScene'
 import { buildEntityIndex } from '../../utils/entityResolver'
+import { useFeatureFlag } from '../../utils/useFeatureFlag'
 import { useState, useMemo, useEffect, useRef, useCallback, useSyncExternalStore } from 'react'
 import { getProjectType } from '../../constants/projectTypes'
 import { BREAKPOINT_MS_OVERLAY, useMediaQuery } from '../../utils/useMediaQuery'
@@ -484,10 +485,12 @@ export default function Manuscript({ store, userId, membership = null }) {
   const locationNames = useMemo(() => locations.map(l => l.name).filter(Boolean), [locations])
 
   // Name and alias lookup for highlighting, chips and previews. Built by one shared resolver (Release C, C1) that
-  // keeps the previous behaviour exactly and also understands `aliases` on every record type.
+  // keeps the previous behaviour exactly and also understands `aliases` on every record type. Factions are
+  // recognised in the text only while `connected_refs` is on; nothing changes for anyone else.
+  const connectedRefs = useFeatureFlag('connected_refs')
   const entityMap = useMemo(
-    () => buildEntityIndex({ characters, locations, loreEntries, worldHistory, timeline }).map,
-    [characters, locations, loreEntries, worldHistory, timeline],
+    () => buildEntityIndex({ characters, locations, loreEntries, worldHistory, timeline, factions: connectedRefs ? factions : [] }).map,
+    [characters, locations, loreEntries, worldHistory, timeline, factions, connectedRefs],
   )
 
   // Autosave state tracking — wraps updateSceneContent with UI feedback. The

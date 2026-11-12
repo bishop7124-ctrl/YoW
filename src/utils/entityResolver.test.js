@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildEntityIndex, collisionsForRecord, recordAliases, parseAliasText } from './entityResolver'
+import { buildEntityIndex, clashesForTexts, collisionsForRecord, recordAliases, parseAliasText } from './entityResolver'
 
 // The map the editor built before this module existed, kept here as the behaviour to preserve.
 const legacyMap = ({ characters = [], locations = [], loreEntries = [], worldHistory = [], timeline = [] }) => {
@@ -93,5 +93,44 @@ describe('recordAliases and parseAliasText', () => {
   })
   it('splits free text on commas, semicolons and new lines', () => {
     expect(parseAliasText('Lady M, the Wolf;  \nMi\nMira', 'Mira')).toEqual(['Lady M', 'the Wolf', 'Mi'])
+  })
+})
+
+describe('clashesForTexts', () => {
+  const project = {
+    characters: [{ id: 'c1', name: 'Mira Vale', aliases: ['Lady M'] }, { id: 'c2', name: 'Tomas' }],
+    locations: [{ id: 'l1', name: 'Ashport', aliases: ['the Harbour'] }],
+    factions: [{ id: 'f1', name: 'The Wardens' }],
+  }
+  it('reports texts already used by another record, by name or by alias', () => {
+    const result = clashesForTexts(project, { list: 'characters', id: 'c2' }, ['Ashport', 'the harbour', 'Fresh name', 'Lady M'])
+    expect(result.map(r => r.text)).toEqual(['Ashport', 'the harbour', 'Lady M'])
+    expect(result[0].others[0]).toEqual(expect.objectContaining({ id: 'l1', sectionLabel: 'Location' }))
+  })
+  it('never reports the record being edited against itself, but does for a new record', () => {
+    expect(clashesForTexts(project, { list: 'characters', id: 'c1' }, ['Mira Vale', 'Lady M'])).toEqual([])
+    expect(clashesForTexts(project, { list: 'characters' }, ['Mira Vale'])).toHaveLength(1)
+  })
+  it('includes factions, ignores short and repeated texts, and tolerates missing data', () => {
+    expect(clashesForTexts(project, { list: 'locations', id: 'l1' }, ['the wardens', 'the wardens', 'x', ''])).toHaveLength(1)
+    expect(clashesForTexts(undefined, undefined, ['Mira'])).toEqual([])
+  })
+})
+
+describe('linked history entries and timeline events', () => {
+  const data = {
+    worldHistory: [{ id: 'h1', title: 'The Siege', aliases: ['Siege of Ash'], timelineEventId: 't1' }],
+    timeline: [{ id: 't1', title: 'The Siege', aliases: ['Siege of Ash'], worldHistoryEntryId: 'h1' }, { id: 't2', title: 'The Siege' }],
+  }
+  it('treats a linked pair as one record, but still reports a different record with the same name', () => {
+    const { collisions } = buildEntityIndex(data)
+    expect(collisions).toHaveLength(1)
+    expect(collisions[0].text).toBe('The Siege')
+    expect(collisions[0].entities.map(e => e.id).sort()).toEqual(['h1', 't2'].sort())
+  })
+  it('does not warn a linked pair about each other when editing either side', () => {
+    const own = { worldHistory: data.worldHistory, timeline: [data.timeline[0]] }
+    expect(clashesForTexts(own, { list: 'worldHistory', id: 'h1', alsoIds: ['t1'] }, ['The Siege', 'Siege of Ash'])).toEqual([])
+    expect(clashesForTexts(own, { list: 'timeline', id: 't1', alsoIds: ['h1'] }, ['The Siege'])).toEqual([])
   })
 })
