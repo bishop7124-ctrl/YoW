@@ -86,10 +86,16 @@ export default async function handler(req, res) {
 
     const candidateIds = candidates.map(c => c.id)
 
-    const [{ data: alreadySent }, { data: novelRows }] = await Promise.all([
+    const [{ data: alreadySent, error: sentError }, { data: novelRows, error: novelError }] = await Promise.all([
       supabase.from('reengagement_emails').select('user_id, stage').in('user_id', candidateIds),
       supabase.from('novels').select('user_id, data').in('user_id', candidateIds),
     ])
+    // Without the record of what was already sent, sending would risk repeating reminders, so stop and let the next
+    // run try again (audit AUD-24).
+    if (sentError || novelError) {
+      console.error('[send-reengagement-emails] could not read the send log or projects', sentError || novelError)
+      return res.status(500).json({ error: 'Could not read the reminder log. No emails were sent.' })
+    }
     const sentSet = new Set((alreadySent || []).map(r => `${r.user_id}:${r.stage}`))
     // Exclude the seeded "Tour with a sample" demo project — opening it is
     // exploring, not creating a world, so it must not count as "hasProject"
@@ -103,25 +109,41 @@ export default async function handler(req, res) {
       const dedupeKey = `${candidate.id}:${candidate.stage}`
       if (sentSet.has(dedupeKey)) continue
 
-      const emailRes = await fetch(`${process.env.SUPABASE_URL}/functions/v1/send-reengagement-email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        },
-        body: JSON.stringify({
-          user_id: candidate.id,
-          email: candidate.email,
-          stage: candidate.stage,
-          hasProject: hasProjectSet.has(candidate.id),
-        }),
-      })
+      // Claim this reminder BEFORE sending. The (user, stage) key is unique, so two overlapping runs cannot both
+      // claim it, and a crash after the send can no longer lead to a repeat. If the claim cannot be made for any
+      // reason, nothing is sent for this person this run.
+      const { error: claimError } = await supabase.from('reengagement_emails').insert({ user_id: candidate.id, stage: candidate.stage })
+      if (claimError) {
+        if (claimError.code !== '23505') console.error('[send-reengagement-emails] could not claim', candidate.id, candidate.stage, claimError)
+        continue
+      }
+
+      let emailRes
+      try {
+        emailRes = await fetch(`${process.env.SUPABASE_URL}/functions/v1/send-reengagement-email`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            user_id: candidate.id,
+            email: candidate.email,
+            stage: candidate.stage,
+            hasProject: hasProjectSet.has(candidate.id),
+          }),
+        })
+      } catch (networkError) {
+        emailRes = { ok: false, text: async () => String(networkError?.message || networkError) }
+      }
 
       if (emailRes.ok) {
-        await supabase.from('reengagement_emails').upsert({ user_id: candidate.id, stage: candidate.stage })
         sentCount += 1
       } else {
         console.error('[send-reengagement-emails] failed', candidate.id, candidate.stage, await emailRes.text())
+        // Nothing was delivered: release the claim so the next run can try again.
+        const { error: releaseError } = await supabase.from('reengagement_emails').delete().eq('user_id', candidate.id).eq('stage', candidate.stage)
+        if (releaseError) console.error('[send-reengagement-emails] could not release claim', candidate.id, candidate.stage, releaseError)
       }
     }
 
