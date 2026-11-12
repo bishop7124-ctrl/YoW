@@ -7,10 +7,11 @@ import { MAX_ALIASES_PER_RECORD, buildClashIndex, clashesFromIndex, parseAliasTe
 export function AliasClashNotes({ texts, data, self }) {
   const enabled = useFeatureFlag('connected_refs')
   // The index of every other record's names is built once per change to the project's lists (not per keystroke).
+  const alsoKey = (self?.alsoIds || []).join('|')
   const index = useMemo(
     () => (enabled ? buildClashIndex(data, self) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [enabled, data?.characters, data?.locations, data?.factions, data?.loreEntries, data?.worldHistory, data?.timeline, self?.list, self?.id, (self?.alsoIds || []).join('|')],
+    [enabled, data?.characters, data?.locations, data?.factions, data?.loreEntries, data?.worldHistory, data?.timeline, self?.list, self?.id, alsoKey],
   )
   if (!enabled) return null
   return clashesFromIndex(index, texts).map(({ text, others }) => (
