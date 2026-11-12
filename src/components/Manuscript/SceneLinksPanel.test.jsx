@@ -2,8 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 
-const flag = { on: true }
-vi.mock('../../utils/useFeatureFlag', () => ({ useFeatureFlag: () => flag.on }))
+const flag = { on: true, refs: false }
+vi.mock('../../utils/useFeatureFlag', () => ({ useFeatureFlag: key => (key === 'connected_refs' ? flag.refs : flag.on) }))
 import SceneLinksPanel from './SceneLinksPanel'
 
 const characters = [{ id: 'c1', name: 'Mira Ashford' }, { id: 'c2', name: 'Tomas' }]
@@ -16,7 +16,7 @@ const open = (scene = baseScene, onUpdateScene = vi.fn()) => {
   return onUpdateScene
 }
 
-beforeEach(() => { flag.on = true })
+beforeEach(() => { flag.on = true; flag.refs = false })
 afterEach(cleanup)
 
 describe('SceneLinksPanel', () => {
@@ -127,5 +127,50 @@ describe('SceneLinksPanel', () => {
     fireEvent.click(screen.getByText('Add all suggestions'))
     expect(update.mock.calls[0][1].timelineEventIds).toBeUndefined()
     expect(screen.getByLabelText('Add The Fall of Northwatch')).toBeTruthy()
+  })
+})
+
+describe('SceneLinksPanel lore, faction and history groups (C1d)', () => {
+  const loreEntries = [{ id: 'k1', title: 'The Long Winter', aliases: ['the Cold Years'] }]
+  const factions = [{ id: 'f1', name: 'The Wardens' }]
+  const worldHistory = [{ id: 'h1', title: 'Founding of Ashport' }]
+  const scene = { id: 's1', title: 'Pass', content: 'During the Cold Years the Wardens held the pass.' }
+  const renderWith = (sceneValue = scene, update = vi.fn()) => {
+    render(<SceneLinksPanel scene={sceneValue} onUpdateScene={update} characters={characters} locations={locations} timeline={timeline} loreEntries={loreEntries} factions={factions} worldHistory={worldHistory} />)
+    return update
+  }
+
+  it('shows none of the new groups or suggestions while connected_refs is off', () => {
+    renderWith()
+    expect(screen.queryByLabelText('Add a lore entry…')).toBeNull()
+    expect(screen.queryByLabelText('Add a faction…')).toBeNull()
+    expect(screen.queryByLabelText('Add The Wardens')).toBeNull()
+  })
+
+  it('offers the groups, adds a link from the picker, and removes it again', () => {
+    flag.refs = true
+    const update = renderWith()
+    fireEvent.change(screen.getByLabelText('Add a faction…'), { target: { value: 'f1' } })
+    expect(update).toHaveBeenCalledWith('s1', { factionIds: ['f1'] })
+    cleanup()
+    const second = renderWith({ ...scene, loreIds: ['k1'] })
+    fireEvent.click(screen.getByLabelText('Remove The Long Winter from this scene'))
+    expect(second).toHaveBeenCalledWith('s1', { loreIds: [] })
+  })
+
+  it('suggests them from names and other names, and applies only on confirmation', () => {
+    flag.refs = true
+    const update = renderWith()
+    expect(update).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByLabelText('Add The Long Winter'))
+    expect(update).toHaveBeenCalledWith('s1', { loreIds: ['k1'] })
+    fireEvent.click(screen.getByLabelText('Dismiss suggestion The Wardens'))
+    expect(update).toHaveBeenLastCalledWith('s1', { dismissedLinks: ['faction:f1'] })
+  })
+
+  it('labels a link to a deleted record plainly', () => {
+    flag.refs = true
+    renderWith({ ...scene, historyEntryIds: ['gone'] })
+    expect(screen.getByText('Deleted history entry')).toBeTruthy()
   })
 })

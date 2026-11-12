@@ -13,6 +13,8 @@ const GROUP_ORDER = ['Family', 'Relationships', 'Characters', 'Faction', 'Locati
 export function namesFor(type, record) {
   const names = [record.name || record.title].filter(Boolean)
   if (type === 'character') asArray(record.keywords).forEach(word => typeof word === 'string' && names.push(word))
+  // Other names (Release C, C1b) apply to every record type; nobody has any unless they typed some.
+  asArray(record.aliases).forEach(word => typeof word === 'string' && names.push(word))
   return [...new Set(names.map(name => String(name).trim()).filter(name => name.length >= 3))]
 }
 

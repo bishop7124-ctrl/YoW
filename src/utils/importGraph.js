@@ -8,7 +8,7 @@ const ENTITY_COLLECTIONS = Object.fromEntries(IDEA_ENTITY_TYPES.map(type => [typ
 const LIST_REFERENCES = {
   characterIds: 'characters', linkedCharacters: 'characters',
   locationIds: 'locations', linkedLocations: 'locations',
-  factionIds: 'factions', loreIds: 'loreEntries', linkedIdeas: 'ideaEntries',
+  factionIds: 'factions', loreIds: 'loreEntries', historyEntryIds: 'worldHistory', linkedIdeas: 'ideaEntries',
 }
 
 // Resolve only declared reference fields, never arbitrary strings equal to IDs.

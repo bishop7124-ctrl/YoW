@@ -96,7 +96,7 @@ function useSceneEntities(content, entityMap) {
   }, [content, entityMap])
 }
 
-function SceneTab({ scene, onUpdateScene, characterNames, locationNames, entityMap, onEntityClick, characters, locations, timeline, plotThreads }) {
+function SceneTab({ scene, onUpdateScene, characterNames, locationNames, entityMap, onEntityClick, characters, locations, timeline, plotThreads, loreEntries, factions, worldHistory }) {
   // Called unconditionally (rules-of-hooks) even when there's no active scene yet —
   // useSceneEntities itself is a no-op on empty content.
   const entities = useSceneEntities(scene?.content, entityMap)
@@ -165,7 +165,7 @@ function SceneTab({ scene, onUpdateScene, characterNames, locationNames, entityM
         </label>
       </div>
 
-      <SceneLinksPanel key={scene.id} scene={scene} onUpdateScene={onUpdateScene} characters={characters} locations={locations} timeline={timeline} />
+      <SceneLinksPanel key={scene.id} scene={scene} onUpdateScene={onUpdateScene} characters={characters} locations={locations} timeline={timeline} loreEntries={loreEntries} factions={factions} worldHistory={worldHistory} />
       <ScenePlotThreads key={`threads-${scene.id}`} scene={scene} onUpdateScene={onUpdateScene} threads={plotThreads} />
       <SceneTensionPurpose key={`tension-${scene.id}`} scene={scene} onUpdateScene={onUpdateScene} />
 
@@ -710,6 +710,9 @@ export default function ManuscriptInspector({
             locations={locations}
             timeline={timeline}
             plotThreads={plotThreads}
+            loreEntries={loreEntries}
+            factions={factions}
+            worldHistory={worldHistory}
           />
         )}
         {activeTab === 'notes' && (

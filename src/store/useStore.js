@@ -3342,6 +3342,7 @@ export function useStore(userId = null, options = {}) {
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character =>
       deletedSet.has(character.factionId) ? { ...character, factionId: '' } : character
     ))
+    clearSceneLinksFor({ factionIds: [...deletedSet] })
     commitLocal(rpgCharactersRef, setRpgCharacters, 'nf_rpg_characters', prev => prev.map(character => (
       character.factionIds?.some(factionId => deletedSet.has(factionId))
         ? { ...character, factionIds: character.factionIds.filter(factionId => !deletedSet.has(factionId)) }
@@ -3591,6 +3592,7 @@ export function useStore(userId = null, options = {}) {
     const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
     if (!deletedSet.size) return true
     if (canSyncCloud) [...deletedSet].forEach(dId => cloudDelete('world_history', dId))
+    clearSceneLinksFor({ historyEntryIds: [...deletedSet] })
     commitLocal(timelineRef, setTimeline, 'nf_timeline', prev => prev.map(e => deletedSet.has(e.worldHistoryEntryId) ? { ...e, worldHistoryEntryId: null } : e))
     return true
   }
@@ -3624,6 +3626,7 @@ export function useStore(userId = null, options = {}) {
     const deletedSet = new Set(deletedIds.filter(deletedId => !remainingIds.has(deletedId)))
     if (!deletedSet.size) return true // Current-project hide: keep earlier links/cloud rows.
     if (canSyncCloud) [...deletedSet].forEach(dId => cloudDelete('lore_entries', dId))
+    clearSceneLinksFor({ loreIds: [...deletedSet] })
     commitLocal(loreEntriesRef, setLoreEntries, 'nf_loreEntries', prev => {
       return prev.map(entry => Array.isArray(entry.loreIds) && entry.loreIds.some(loreId => deletedSet.has(loreId))
         ? { ...entry, loreIds: entry.loreIds.filter(loreId => !deletedSet.has(loreId)) }

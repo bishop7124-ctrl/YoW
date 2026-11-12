@@ -124,3 +124,48 @@ describe('remapSceneLinks', () => {
     expect(remapSceneLinks({ characterIds: ['c1'] }, undefined)).toEqual({ characterIds: [] })
   })
 })
+
+describe('lore, faction and history links (C1d)', () => {
+  const lore = [{ id: 'k1', title: 'The Long Winter', aliases: ['the Cold Years'] }]
+  const factions = [{ id: 'f1', name: 'The Wardens', aliases: ['the Watch'] }]
+  const history = [{ id: 'h1', title: 'Founding of Ashport' }]
+
+  it('reads the new fields, defaulting to empty', () => {
+    expect(getSceneLinks({}).loreIds).toEqual([])
+    expect(getSceneLinks({ loreIds: ['k1', 7], factionIds: ['f1'], historyEntryIds: ['h1'] })).toMatchObject({ loreIds: ['k1'], factionIds: ['f1'], historyEntryIds: ['h1'] })
+  })
+  it('adds and removes links for the new types, and clears a matching dismissal on add', () => {
+    expect(addLinkPatch({}, 'lore', 'k1')).toEqual({ loreIds: ['k1'] })
+    expect(addLinkPatch({ factionIds: ['f1'] }, 'faction', 'f1')).toEqual({})
+    expect(addLinkPatch({ dismissedLinks: ['history:h1'] }, 'history', 'h1')).toEqual({ historyEntryIds: ['h1'], dismissedLinks: [] })
+    expect(removeLinkPatch({ loreIds: ['k1', 'k2'] }, 'lore', 'k1')).toEqual({ loreIds: ['k2'] })
+  })
+  it('suggests them from names and other names in the text, but not once linked or dismissed', () => {
+    const scene = { content: '<p>During the Cold Years the Watch held the pass after the Founding of Ashport.</p>' }
+    const found = suggestSceneLinks(scene, { lore, factions, history })
+    expect(found.lore.map(i => i.id)).toEqual(['k1'])
+    expect(found.factions.map(i => i.id)).toEqual(['f1'])
+    expect(found.history.map(i => i.id)).toEqual(['h1'])
+    expect(countSuggestions(found)).toBe(3)
+    const quiet = suggestSceneLinks({ ...scene, loreIds: ['k1'], dismissedLinks: ['faction:f1'] }, { lore, factions, history })
+    expect(quiet.lore).toEqual([])
+    expect(quiet.factions).toEqual([])
+  })
+  it('gives no suggestions of these types when their lists are not passed', () => {
+    const found = suggestSceneLinks({ content: 'The Wardens and the Long Winter' }, {})
+    expect(found.lore).toEqual([])
+    expect(found.factions).toEqual([])
+    expect(countSuggestions(found)).toBe(0)
+  })
+  it('remaps them on import and drops links to records that were not imported', () => {
+    expect(remapSceneLinks({ loreIds: ['a', 'x'], factionIds: ['b'], historyEntryIds: ['c'] }, { a: 'A', b: 'B' }))
+      .toEqual({ loreIds: ['A'], factionIds: ['B'], historyEntryIds: [] })
+  })
+  it('removes deleted records from every scene and reports only the scenes that changed', () => {
+    const scenes = [{ id: 's1', loreIds: ['k1', 'k2'] }, { id: 's2', factionIds: ['f1'] }, { id: 's3', loreIds: ['k2'] }]
+    expect(scenesWithoutLinks(scenes, { loreIds: ['k1'], factionIds: ['f1'] })).toEqual([
+      { id: 's1', patch: { loreIds: ['k2'] } },
+      { id: 's2', patch: { factionIds: [] } },
+    ])
+  })
+})

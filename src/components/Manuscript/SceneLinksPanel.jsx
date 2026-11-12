@@ -15,6 +15,14 @@ const GROUPS = [
   { type: 'location', field: 'locationIds', label: 'Locations', addLabel: 'Add a location…' },
   { type: 'timeline', field: 'timelineEventIds', label: 'Timeline events', addLabel: 'Add an event…' },
 ]
+// Release C (C1d): what else a scene can be about. Offered only while the `connected_refs` flag is on.
+const EXTRA_GROUPS = [
+  { type: 'lore', field: 'loreIds', label: 'Lore', addLabel: 'Add a lore entry…' },
+  { type: 'faction', field: 'factionIds', label: 'Factions', addLabel: 'Add a faction…' },
+  { type: 'history', field: 'historyEntryIds', label: 'History', addLabel: 'Add a history entry…' },
+]
+const TYPE_WORDS = { timeline: 'event', history: 'history entry', lore: 'lore entry' }
+const typeWord = type => TYPE_WORDS[type] || type
 const nameOf = record => record?.name || record?.title || 'Untitled'
 const SUGGEST_DELAY_MS = 1200
 
@@ -29,20 +37,25 @@ function useSettledValue(value, delay) {
   return settled
 }
 
-export default function SceneLinksPanel({ scene, onUpdateScene, characters = [], locations = [], timeline = [] }) {
+export default function SceneLinksPanel({ scene, onUpdateScene, characters = [], locations = [], timeline = [], loreEntries = [], factions = [], worldHistory = [] }) {
   const enabled = useFeatureFlag('scene_links')
+  const connectedRefs = useFeatureFlag('connected_refs')
   const links = getSceneLinks(scene)
-  const lists = { character: characters, location: locations, timeline }
+  const lists = { character: characters, location: locations, timeline, lore: loreEntries, faction: factions, history: worldHistory }
+  const groups = connectedRefs ? [...GROUPS, ...EXTRA_GROUPS] : GROUPS
   const byId = useMemo(() => ({
     character: new Map(characters.map(item => [item.id, item])),
     location: new Map(locations.map(item => [item.id, item])),
     timeline: new Map(timeline.map(item => [item.id, item])),
-  }), [characters, locations, timeline])
+    lore: new Map(loreEntries.map(item => [item.id, item])),
+    faction: new Map(factions.map(item => [item.id, item])),
+    history: new Map(worldHistory.map(item => [item.id, item])),
+  }), [characters, locations, timeline, loreEntries, factions, worldHistory])
   const settledContent = useSettledValue(scene?.content, SUGGEST_DELAY_MS)
   const suggestions = useMemo(
-    () => (enabled && scene ? suggestSceneLinks({ ...scene, content: settledContent }, { characters, locations, timeline }) : null),
+    () => (enabled && scene ? suggestSceneLinks({ ...scene, content: settledContent }, { characters, locations, timeline, ...(connectedRefs ? { lore: loreEntries, factions, history: worldHistory } : {}) }) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [enabled, scene?.id, settledContent, scene?.title, scene?.synopsis, scene?.notes, scene?.characterIds, scene?.locationIds, scene?.timelineEventIds, scene?.dismissedLinks, scene?.pov, scene?.locationTag, scene?.povCharacterId, characters, locations, timeline],
+    [enabled, connectedRefs, scene?.id, settledContent, scene?.title, scene?.synopsis, scene?.notes, scene?.characterIds, scene?.locationIds, scene?.timelineEventIds, scene?.loreIds, scene?.factionIds, scene?.historyEntryIds, scene?.dismissedLinks, scene?.pov, scene?.locationTag, scene?.povCharacterId, characters, locations, timeline, loreEntries, factions, worldHistory],
   )
   const shownYear = links.storyYear === null ? '' : String(links.storyYear)
   const [yearState, setYearState] = useState({ from: shownYear, text: shownYear, dirty: false })
@@ -85,7 +98,7 @@ export default function SceneLinksPanel({ scene, onUpdateScene, characters = [],
         </select>
       </label>
 
-      {GROUPS.map(group => {
+      {groups.map(group => {
         const ids = links[group.field]
         const available = lists[group.type].filter(record => record?.id && !ids.includes(record.id))
         return (
@@ -97,7 +110,7 @@ export default function SceneLinksPanel({ scene, onUpdateScene, characters = [],
                   const record = byId[group.type].get(id)
                   return (
                     <span key={id} role="listitem" className={`ms-link-chip${record ? '' : ' is-missing'}`}>
-                      {record ? nameOf(record) : `Deleted ${group.type === 'timeline' ? 'event' : group.type}`}
+                      {record ? nameOf(record) : `Deleted ${typeWord(group.type)}`}
                       <button type="button" aria-label={`Remove ${record ? nameOf(record) : 'deleted link'} from this scene`} onClick={() => apply(removeLinkPatch(scene, group.type, id))}>×</button>
                     </span>
                   )
@@ -131,9 +144,9 @@ export default function SceneLinksPanel({ scene, onUpdateScene, characters = [],
                 <button type="button" aria-label={`Dismiss suggestion ${suggestions.pov.name}`} onClick={() => apply(dismissSuggestionPatch(scene, 'pov', suggestions.pov.id))}>Dismiss</button>
               </li>
             )}
-            {[...suggestions.characters, ...suggestions.locations, ...suggestions.events].map(item => (
+            {[...suggestions.characters, ...suggestions.locations, ...suggestions.events, ...suggestions.lore, ...suggestions.factions, ...suggestions.history].map(item => (
               <li key={`${item.type}:${item.id}`}>
-                <span><strong>{item.name}</strong> <em>({item.type === 'timeline' ? 'event' : item.type}; {item.reason.toLowerCase()})</em></span>
+                <span><strong>{item.name}</strong> <em>({typeWord(item.type)}; {item.reason.toLowerCase()})</em></span>
                 <button type="button" aria-label={`Add ${item.name}`} onClick={() => apply(addLinkPatch(scene, item.type, item.id))}>Add</button>
                 <button type="button" aria-label={`Dismiss suggestion ${item.name}`} onClick={() => apply(dismissSuggestionPatch(scene, item.type, item.id))}>Dismiss</button>
               </li>

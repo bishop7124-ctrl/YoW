@@ -7,6 +7,8 @@
 //   povCharacterId: string | null   point-of-view character
 //   locationIds: string[]           where it happens
 //   timelineEventIds: string[]      events it depicts
+//   loreIds / factionIds / historyEntryIds: string[]   lore entries, factions and history entries it is about
+//                                   (Release C, C1d; only offered while the `connected_refs` flag is on)
 //   storyYear: number | null        in-story year (optional)
 //   timeShift: null | 'flashback' | 'flashforward'
 //   dismissedLinks: string[]        "type:id" suggestions the writer rejected, so they stop reappearing
@@ -30,6 +32,9 @@ export function getSceneLinks(scene) {
     povCharacterId: typeof scene?.povCharacterId === 'string' && scene.povCharacterId ? scene.povCharacterId : null,
     locationIds: asIds(scene?.locationIds),
     timelineEventIds: asIds(scene?.timelineEventIds),
+    loreIds: asIds(scene?.loreIds),
+    factionIds: asIds(scene?.factionIds),
+    historyEntryIds: asIds(scene?.historyEntryIds),
     storyYear,
     timeShift: scene?.timeShift === 'flashback' || scene?.timeShift === 'flashforward' ? scene.timeShift : null,
     dismissed: new Set(asIds(scene?.dismissedLinks)),
@@ -37,7 +42,8 @@ export function getSceneLinks(scene) {
 }
 
 export const linkKey = (type, id) => `${type}:${id}`
-const FIELD_FOR = { character: 'characterIds', location: 'locationIds', timeline: 'timelineEventIds' }
+const FIELD_FOR = { character: 'characterIds', location: 'locationIds', timeline: 'timelineEventIds', lore: 'loreIds', faction: 'factionIds', history: 'historyEntryIds' }
+const EXTRA_FIELDS = ['loreIds', 'factionIds', 'historyEntryIds']
 
 // Patches for updateScene. Each returns a plain object of the fields to change.
 export function addLinkPatch(scene, type, id) {
@@ -73,10 +79,10 @@ export function setPovPatch(scene, characterId) {
 
 // Everything the writer has not yet confirmed or rejected, found by matching names in the scene text and the
 // legacy POV / location strings to project records. Whole words only; names under 3 letters are ignored.
-export function suggestSceneLinks(scene, { characters = [], locations = [], timeline = [] } = {}) {
+export function suggestSceneLinks(scene, { characters = [], locations = [], timeline = [], lore = [], factions = [], history = [] } = {}) {
   const links = getSceneLinks(scene)
   const text = [scene?.title, scene?.synopsis, plainText(scene?.content), plainText(scene?.notes)].join(' \n ')
-  const out = { characters: [], locations: [], events: [], pov: null }
+  const out = { characters: [], locations: [], events: [], lore: [], factions: [], history: [], pov: null }
 
   const consider = (type, list, confirmed, bucket, minLength = 3) => {
     list.forEach(record => {
@@ -89,6 +95,9 @@ export function suggestSceneLinks(scene, { characters = [], locations = [], time
   consider('character', characters, links.characterIds, out.characters)
   consider('location', locations, links.locationIds, out.locations)
   consider('timeline', timeline, links.timelineEventIds, out.events, 6)
+  consider('lore', lore, links.loreIds, out.lore)
+  consider('faction', factions, links.factionIds, out.factions)
+  consider('history', history, links.historyEntryIds, out.history, 6)
 
   // Legacy "Point of view" text -> a character, if it names exactly one.
   if (!links.povCharacterId && typeof scene?.pov === 'string' && scene.pov.trim()) {
@@ -110,7 +119,8 @@ export function suggestSceneLinks(scene, { characters = [], locations = [], time
 }
 
 export const countSuggestions = suggestions =>
-  suggestions.characters.length + suggestions.locations.length + suggestions.events.length + (suggestions.pov ? 1 : 0)
+  suggestions.characters.length + suggestions.locations.length + suggestions.events.length
+  + (suggestions.lore?.length || 0) + (suggestions.factions?.length || 0) + (suggestions.history?.length || 0) + (suggestions.pov ? 1 : 0)
 
 // The year a scene takes place: the writer's own storyYear, else the year of the events it depicts when they all
 // agree. Returns null when neither is known, or when the linked events span different years (so no rule ever
@@ -139,14 +149,17 @@ export function parseStoryYearInput(text) {
 export function remapSceneLinks(scene, idMap) {
   const out = {}
   const map = ids => asIds(ids).map(id => idMap?.[id]).filter(Boolean)
-  ;['characterIds', 'locationIds', 'timelineEventIds'].forEach(field => { if (Array.isArray(scene?.[field])) out[field] = map(scene[field]) })
+  ;['characterIds', 'locationIds', 'timelineEventIds', ...EXTRA_FIELDS].forEach(field => { if (Array.isArray(scene?.[field])) out[field] = map(scene[field]) })
   if (typeof scene?.povCharacterId === 'string' && scene.povCharacterId) out.povCharacterId = idMap?.[scene.povCharacterId] || null
   return out
 }
 
 // Removes deleted records' ids from every scene's links. Returns only the scenes that changed.
-export function scenesWithoutLinks(scenes, { characterIds = [], locationIds = [], timelineEventIds = [] }) {
-  const gone = { characterIds: new Set(characterIds), locationIds: new Set(locationIds), timelineEventIds: new Set(timelineEventIds) }
+export function scenesWithoutLinks(scenes, { characterIds = [], locationIds = [], timelineEventIds = [], loreIds = [], factionIds = [], historyEntryIds = [] }) {
+  const gone = {
+    characterIds: new Set(characterIds), locationIds: new Set(locationIds), timelineEventIds: new Set(timelineEventIds),
+    loreIds: new Set(loreIds), factionIds: new Set(factionIds), historyEntryIds: new Set(historyEntryIds),
+  }
   const changed = []
   ;(scenes || []).forEach(scene => {
     const patch = {}
