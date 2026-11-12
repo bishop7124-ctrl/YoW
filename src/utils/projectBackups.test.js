@@ -32,16 +32,36 @@ describe('helpers', () => {
   it('clamps retention to 1 to 20 with a default of 5', () => {
     expect([normalizeRetention(0), normalizeRetention('99'), normalizeRetention('7'), normalizeRetention('x')]).toEqual([5, 20, 7, 5])
   })
-  it('strips media only when the writer chose to exclude it', () => {
-    const data = { project: { title: 'T', coverPhoto: 'c', bannerImage: 'b' }, characters: [{ id: 'c1', image: 'i' }] }
-    expect(buildBackupEntry(data, { includeMedia: true, includeCustomerData: true }).data.project.coverPhoto).toBe('c')
-    const stripped = buildBackupEntry(data, { includeMedia: false, includeCustomerData: false }, 'auto', 'automatic', NOW)
-    expect(stripped.data.project.coverPhoto).toBeNull()
-    expect(stripped.data.characters[0].image).toBeNull()
+  it('leaves out every uploaded image, wherever it sits, only when the writer chose to exclude them (audit AUD-18)', () => {
+    const photo = 'yow-media:user-1/covers/a.webp'
+    const signed = 'https://abc.supabase.co/storage/v1/object/sign/user-media/user-1/maps/b.webp?token=x'
+    const data = {
+      project: { title: 'T', coverPhoto: photo, bannerImage: 'data:image/png;base64,AAAA' },
+      characters: [{ id: 'c1', name: 'Mira', image: photo, portrait: signed }],
+      factions: [{ id: 'f1', logo: { image: photo, shapes: [] } }],
+      maps: [{ id: 'm1', metadata: { backdrop: { src: signed } }, mapObjects: [{ id: 'o1', linkedEntity: null }] }],
+      comicPanels: [{ id: 'p1', art: { layers: [{ src: photo }] } }],
+      scenes: [{ id: 's1', content: `<p>See <img src="${signed}"> here</p>`, title: 'The https://example.com/page scene' }],
+      loreEntries: [{ id: 'l1', content: 'A plain note' }],
+    }
+    const kept = buildBackupEntry(data, { includeMedia: true }).data
+    expect(kept.characters[0].image).toBe(photo)
+    const stripped = buildBackupEntry(data, { includeMedia: false }, 'auto', 'automatic', NOW)
+    const out = stripped.data
+    expect(out.project).toMatchObject({ title: 'T', coverPhoto: null, bannerImage: null })
+    expect(out.characters[0]).toMatchObject({ name: 'Mira', image: null, portrait: null })
+    expect(out.factions[0].logo).toEqual({ image: null, shapes: [] })
+    expect(out.maps[0].metadata.backdrop.src).toBeNull()
+    expect(out.comicPanels[0].art.layers[0].src).toBeNull()
+    // prose that merely contains an address or an image tag is never touched
+    expect(out.scenes[0]).toEqual(data.scenes[0])
+    expect(out.loreEntries[0].content).toBe('A plain note')
     expect(stripped).toMatchObject({ kind: 'auto', title: 'T', createdAt: new Date(NOW).toISOString() })
-    expect(stripped.data.backup.source).toBe('automatic')
+    expect(stripped.data.backup).toMatchObject({ source: 'automatic' })
+    expect(stripped.data.backup).not.toHaveProperty('includeCustomerData')
+    expect(data.characters[0].image).toBe(photo) // the original is not modified
     expect(buildBackupEntry(null, {})).toBeNull()
-    expect(stripMediaFromBackup({}).characters).toEqual([])
+    expect(stripMediaFromBackup({ characters: [] })).toEqual({ characters: [] })
   })
   it('reads a stored list defensively', () => {
     expect(readBackups(() => '[{"id":"a"}]', 'p1')).toEqual([{ id: 'a' }])

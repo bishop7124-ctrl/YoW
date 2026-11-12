@@ -4,7 +4,9 @@
 // Snapshots are kept ON THIS DEVICE (in this browser's or the desktop app's storage under nf_project_backups_<id>).
 // They are not a ZIP file anywhere until the writer downloads one from Project Settings.
 
-export const BACKUP_DEFAULTS = { frequency: 'manual', retention: 5, includeMedia: true, includeCustomerData: true }
+import { getUserMediaPath } from './uploadUserMedia.js'
+
+export const BACKUP_DEFAULTS = { frequency: 'manual', retention: 5, includeMedia: true }
 export const backupKey = projectId => `nf_project_backups_${projectId}`
 export const MIN_RETRY_AFTER_FAILURE_MS = 60 * 60 * 1000
 
@@ -19,15 +21,21 @@ export function shouldCreateAutoBackup(config, lastBackupAt, now = Date.now()) {
   return now - last >= (config.frequency === 'weekly' ? 7 * DAY_MS : DAY_MS)
 }
 
-export const stripMediaFromBackup = data => ({
-  ...data,
-  project: data.project ? { ...data.project, coverPhoto: null, bannerImage: null } : data.project,
-  series: data.series ? { ...data.series, coverPhoto: null } : data.series,
-  characters: (data.characters || []).map(item => ({ ...item, image: null, portrait: null, photo: null })),
-  locations: (data.locations || []).map(item => ({ ...item, image: null, photo: null })),
-  loreEntries: (data.loreEntries || []).map(item => ({ ...item, image: null, photo: null })),
-  maps: (data.maps || []).map(item => ({ ...item, image: null, backgroundImage: null, mapImage: null })),
-})
+// Leaves out every uploaded image, wherever it sits in the project (covers, portraits, faction logos, map
+// backdrops, comic art and so on), by clearing each stored value that IS an image reference or an embedded image.
+// It walks the whole snapshot instead of naming fields, so images added by later features are covered too
+// (audit AUD-18). Text, including rich text that merely contains an image tag, is never touched.
+// Only a value that is wholly an image reference counts. A longer string that merely contains an address (a scene's
+// text with an image tag in it) is prose and is left alone.
+const isImageValue = value => typeof value === 'string'
+  && (/^data:image\//i.test(value)
+    || (/^(yow-media:|https?:\/\/)/i.test(value) && !/\s/.test(value) && Boolean(getUserMediaPath(value))))
+export function stripMediaFromBackup(value) {
+  if (isImageValue(value)) return null
+  if (Array.isArray(value)) return value.map(stripMediaFromBackup)
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, stripMediaFromBackup(item)]))
+  return value
+}
 
 export function readBackups(readItem, projectId) {
   try {
@@ -46,7 +54,7 @@ export function buildBackupEntry(exportData, config, kind = 'manual', source = '
     kind,
     createdAt,
     title: exportData.project?.title || 'Untitled project',
-    data: { ...prepared, backup: { createdAt, includeCustomerData: config.includeCustomerData, source, config } },
+    data: { ...prepared, backup: { createdAt, source, config } },
   }
 }
 

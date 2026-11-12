@@ -761,8 +761,7 @@ function ProjectSettings({ store, onClose }) {
                 </div>
 
                 <div className="project-settings-checks">
-                  <label><input type="checkbox" checked={backupConfig.includeMedia} onChange={e => saveBackupConfig({ includeMedia: e.target.checked })} /> Include cover and media fields</label>
-                  <label><input type="checkbox" checked={backupConfig.includeCustomerData} onChange={e => saveBackupConfig({ includeCustomerData: e.target.checked })} /> Include project settings metadata</label>
+                  <label><input type="checkbox" checked={backupConfig.includeMedia} onChange={e => saveBackupConfig({ includeMedia: e.target.checked })} /> Include uploaded images (covers, portraits, logos, maps)</label>
                 </div>
 
                 <div className="project-settings-backup-list">
