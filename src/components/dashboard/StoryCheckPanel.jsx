@@ -22,6 +22,8 @@ export default function StoryCheckPanel({ store }) {
   const enabled = useFeatureFlag('story_check')
   // Plot-thread checks (R13 to R16) only see threads while the `plot_threads` flag is on.
   const threadsEnabled = useFeatureFlag('plot_threads')
+  // Knowledge checks (R17, R18) only appear in the rules list while `character_knowledge` is on.
+  const knowledgeEnabled = useFeatureFlag('character_knowledge')
   const project = store?.activeProjectStats?.project
   const stats = store?.activeProjectStats
   const settings = project?.storyCheck
@@ -131,7 +133,7 @@ export default function StoryCheckPanel({ store }) {
 
       {showRules && (
         <div className="story-check-rules">
-          {RULES.filter(rule => threadsEnabled || !/^R1[3-6]$/.test(rule.id)).map(rule => (
+          {RULES.filter(rule => (threadsEnabled || !/^R1[3-6]$/.test(rule.id)) && (knowledgeEnabled || !/^R1[78]$/.test(rule.id))).map(rule => (
             <label key={rule.id}>
               <input type="checkbox" checked={!mutedRules.includes(rule.id)} onChange={() => toggleRule(rule.id)} />
               {rule.name}

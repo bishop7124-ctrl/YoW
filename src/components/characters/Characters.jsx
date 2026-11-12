@@ -14,6 +14,8 @@ import { CharacterPortrait, CharacterAvatar } from '../shared/CharacterPortrait'
 import { useUserMediaUrl } from '../../utils/useUserMediaUrl'
 import FactionLogo from '../Factions/FactionLogo'
 import CharacterJourney from './CharacterJourney'
+import CharacterKnowledge from './CharacterKnowledge'
+import { useFeatureFlag } from '../../utils/useFeatureFlag'
 import CharacterInterview from '../aitools/CharacterInterview'
 import { AIToolsUpgradeWall } from '../aitools/AITools'
 import AIStar from '../ai/AIStar'
@@ -52,6 +54,7 @@ const CHARACTER_TABS = [
 ]
 
 const CHARACTER_FORM_TABS = CHARACTER_TABS.filter(([id]) => id !== 'journey')
+const KNOWLEDGE_TAB = ['knowledge', 'Knowledge']
 
 const CHAT_TAB = ['chat', (
   <span className="inline-flex items-center gap-1.5">
@@ -1006,7 +1009,7 @@ export default function Characters({ store, userId, membership }) {
 }
 
 function CharactersWorkspace({ store, userId, membership }) {
-  const { characters: rawCharacters = [], saveCharacter, saveCharacterJourney, deleteCharacter, selectedCharacterId, setSelectedCharacterId, factions: rawFactions = [], currentYear, loreEntries = [], timeline = [], worldHistory = [], chapters = [], scenes = [] } = store
+  const { characters: rawCharacters = [], saveCharacter, saveCharacterJourney, saveCharacterKnowledge, deleteCharacter, selectedCharacterId, setSelectedCharacterId, factions: rawFactions = [], currentYear, loreEntries = [], timeline = [], worldHistory = [], chapters = [], scenes = [] } = store
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState('name-asc')
   const [filterFamily, setFilterFamily] = useState('')
@@ -1062,7 +1065,8 @@ function CharactersWorkspace({ store, userId, membership }) {
     : { lore: [], timeline: [], history: [] },
     [selected, loreEntries, timeline, worldHistory]
   )
-  const profileTabs = [...CHARACTER_TABS, CHAT_TAB]
+  const knowledgeEnabled = useFeatureFlag('character_knowledge')
+  const profileTabs = [...CHARACTER_TABS, ...(knowledgeEnabled ? [KNOWLEDGE_TAB] : []), CHAT_TAB]
   const activeProfileTab = profileTabs.some(([id]) => id === profileTab) ? profileTab : 'overview'
 
   const handleSave = (formData, savedEditorTab) => {
@@ -1375,6 +1379,19 @@ function CharactersWorkspace({ store, userId, membership }) {
                     if (saved?.id) setSelectedCharacterId(saved.id)
                     return saved
                   }}
+                />
+              )}
+
+              {activeProfileTab === 'knowledge' && (
+                <CharacterKnowledge
+                  key={selected.id}
+                  readOnly={store.readOnly || selected.readOnly}
+                  character={selected}
+                  acts={store.acts || []}
+                  chapters={chapters}
+                  scenes={scenes}
+                  timeline={timeline}
+                  onSave={knowledge => Boolean(saveCharacterKnowledge(selected.id, knowledge))}
                 />
               )}
 

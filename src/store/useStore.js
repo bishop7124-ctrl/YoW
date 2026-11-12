@@ -7,6 +7,7 @@ import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
 import { clearJourneyLinks } from '../utils/characterJourney'
+import { clearKnowledgeLinks, hasKnowledge, normalizeKnowledge } from '../utils/characterKnowledge'
 import { buildCharacterAliases, relationshipValues } from '../utils/relationshipMap.js'
 import { IDEA_STATUS_IDS, ideaContentPatch, normalizeIdea, nextIdeaOrder, planIdeaMove } from '../utils/ideaEntries.js'
 import { getScheduleCalendar, normalizeScheduleEvent, prepareScheduleEvent } from '../utils/scheduleCalendar.js'
@@ -172,6 +173,17 @@ const clearProjectRefs = (refs) => {
 // externalWrite check below caches this per key so a later commit can tell "did
 // anything else touch this key since I wrote it" with a cheap string comparison
 // instead of re-parsing/re-diffing the whole collection every time.
+// A character with the deleted scenes, chapters, events or characters taken out of its journey beats and its
+// recorded knowledge. Returns the same object when there is nothing to clear.
+const clearCharacterLinks = (character, { sceneIds = [], chapterIds = [], timelineEventIds = [], characterIds = [] } = {}) => {
+  let next = character
+  if (next.journey) next = { ...next, journey: clearJourneyLinks(next.journey, { sceneIds, chapterIds, timelineEventIds, characterIds }) }
+  if (hasKnowledge(next)) {
+    const knowledge = clearKnowledgeLinks(next.knowledge, { sceneIds, eventIds: timelineEventIds })
+    if (knowledge !== next.knowledge) next = { ...next, knowledge }
+  }
+  return next
+}
 const save = (key, val) => {
   try {
     const raw = JSON.stringify(val)
@@ -2889,10 +2901,7 @@ export function useStore(userId = null, options = {}) {
         return keep
       })
     })
-    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
-      ...character,
-      journey: clearJourneyLinks(character.journey, { chapterIds, sceneIds }),
-    } : character))
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => clearCharacterLinks(character, { chapterIds, sceneIds })))
     if (sceneSet.has(selectedSceneId)) setSelectedSceneId(null)
     if (sceneSet.has(writingSceneId)) setWritingSceneId(null)
     return true
@@ -2913,10 +2922,7 @@ export function useStore(userId = null, options = {}) {
         return keep
       })
     })
-    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
-      ...character,
-      journey: clearJourneyLinks(character.journey, { chapterIds: [id], sceneIds }),
-    } : character))
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => clearCharacterLinks(character, { chapterIds: [id], sceneIds })))
     if (sceneSet.has(selectedSceneId)) setSelectedSceneId(null)
     if (sceneSet.has(writingSceneId)) setWritingSceneId(null)
     return true
@@ -2936,10 +2942,7 @@ export function useStore(userId = null, options = {}) {
     clearSceneVersions(id)
     markCloudScenesDeleted([id])
     commitLocal(scenesRef, setScenes, 'nf_scenes', prev => prev.filter(s => !(s.id === id && s.novelId === projectId)))
-    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
-      ...character,
-      journey: clearJourneyLinks(character.journey, { sceneIds: [id] }),
-    } : character))
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => clearCharacterLinks(character, { sceneIds: [id] })))
     if (canSyncCloud) cloudDelete('scenes', id)
     if (selectedSceneId === id) setSelectedSceneId(null)
     if (writingSceneId === id) setWritingSceneId(null)
@@ -3038,8 +3041,8 @@ export function useStore(userId = null, options = {}) {
       ...nextScenes,
     ])
     commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => {
-      if (character.novelId !== projectId || !character.journey) return character
-      return { ...character, journey: clearJourneyLinks(character.journey, { sceneIds: currentSceneIds }) }
+      if (character.novelId !== projectId) return character
+      return clearCharacterLinks(character, { sceneIds: currentSceneIds })
     }))
 
     if (canSyncCloud) {
@@ -3217,6 +3220,15 @@ export function useStore(userId = null, options = {}) {
     setCharacters,
     'characters',
     { journey },
+    id,
+    () => null
+  )
+  // What this character knows and when they learn it (Release C, C3). Saved on the character like the journey.
+  const saveCharacterKnowledge = (id, knowledge) => saveSeriesSyncedItem(
+    charactersRef,
+    setCharacters,
+    'characters',
+    { knowledge: normalizeKnowledge(knowledge) },
     id,
     () => null
   )
@@ -3500,10 +3512,7 @@ export function useStore(userId = null, options = {}) {
     if (!deletedSet.size) return true
     if (canSyncCloud) [...deletedSet].forEach(dId => cloudDelete('timeline_events', dId))
     commitLocal(worldHistoryRef, setWorldHistory, 'nf_worldHistory', prev => prev.map(h => deletedSet.has(h.timelineEventId) ? { ...h, timelineEventId: null } : h))
-    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => character.journey ? {
-      ...character,
-      journey: clearJourneyLinks(character.journey, { timelineEventIds: [...deletedSet] }),
-    } : character))
+    commitLocal(charactersRef, setCharacters, 'nf_characters', prev => prev.map(character => clearCharacterLinks(character, { timelineEventIds: [...deletedSet] })))
     clearSceneLinksFor({ timelineEventIds: [...deletedSet] })
     return true
   }
@@ -4877,7 +4886,7 @@ export function useStore(userId = null, options = {}) {
     },
     allProjectStats, activeProjectStats,
     characters: scopedCharacters,
-    saveCharacter, saveRelationship, saveCharacterJourney, updateCharacterJourneyForSeries, deleteCharacter,
+    saveCharacter, saveRelationship, saveCharacterJourney, saveCharacterKnowledge, updateCharacterJourneyForSeries, deleteCharacter,
     factions: novelFactions,
     saveFaction, deleteFaction,
     setFactions: setScopedFactions,
@@ -4933,7 +4942,7 @@ export function useStore(userId = null, options = {}) {
 
   const guardedMethods = [
     'addNovel', 'updateNovel', 'deleteNovel', 'importProjectFromData', 'ensureSampleProject', 'enrichSampleProject', 'addSeries', 'deleteSeries', 'updateSeries', 'reorderSeries', 'reorderNovels',
-    'saveCharacter', 'saveRelationship', 'saveCharacterJourney', 'deleteCharacter', 'setFactions', 'saveLocation', 'deleteLocation',
+    'saveCharacter', 'saveRelationship', 'saveCharacterJourney', 'saveCharacterKnowledge', 'deleteCharacter', 'setFactions', 'saveLocation', 'deleteLocation',
     'addEvent', 'updateEvent', 'deleteEvent', 'linkTimelineHistory', 'unlinkTimelineHistory', 'addHistoryEntry', 'updateHistoryEntry', 'deleteHistoryEntry',
     'addEra', 'updateEra', 'deleteEra',
     'updateCurrentYear', 'addLoreEntry', 'updateLoreEntry', 'deleteLoreEntry',
@@ -4948,6 +4957,7 @@ export function useStore(userId = null, options = {}) {
     'saveRpgCharacter', 'deleteRpgCharacter',
     'addComicPage', 'updateComicPage', 'deleteComicPage', 'reorderComicPage', 'duplicateComicPage',
     'addComicPanel', 'updateComicPanel', 'deleteComicPanel', 'reorderComicPanel',
+    'addPlotThread', 'updatePlotThread', 'deletePlotThread', 'addReference', 'updateReference', 'convertReferenceToLore',
   ]
 
   const guardedApi = { ...api }

@@ -298,3 +298,49 @@ describe('R13-R16 plot thread checks', () => {
     expect(run([thread('t')], [...scenes, ...strays], 'R15')).toHaveLength(1) // the gap is real (16 scenes) and unaffected by the strays
   })
 })
+
+describe('character knowledge rules (R17, R18)', () => {
+  const acts = [{ id: 'a1', order: 0 }]
+  const chapters = [{ id: 'ch1', actId: 'a1', order: 0 }, { id: 'ch2', actId: 'a1', order: 1 }]
+  const scenes = [
+    { id: 's1', chapterId: 'ch1', order: 0, title: 'The gate' },
+    { id: 's2', chapterId: 'ch1', order: 1, title: 'The cellar' },
+    { id: 's3', chapterId: 'ch2', order: 0, title: 'The reveal' },
+    { id: 'sx', chapterId: 'unplaced', order: 0, title: 'Loose' },
+  ]
+  const run = (knowledge, extra = {}) => runStoryCheck({ acts, chapters, scenes: extra.scenes || scenes, characters: [{ id: 'c1', name: 'Mira', knowledge }] })
+  const ids = result => result.findings.map(f => f.ruleId)
+
+  it('R17 flags acting on a fact in a scene before the scene where it is learned', () => {
+    const result = run([{ id: 'f1', text: 'The bridge is mined', learnedAtSceneId: 's3', usedInSceneIds: ['s2', 's1'] }])
+    expect(ids(result)).toEqual(['R17'])
+    expect(result.findings[0].kind).toBe('possible')
+    expect(result.findings[0].evidence.map(e => e.recordId)).toEqual(['c1', 's1', 's3']) // the earliest use is reported
+    expect(result.findings[0].explanation).toMatch(/learns it later/)
+  })
+
+  it('R17 is quiet when the fact is learned first, in the same scene, or the scene is a flashback or unplaced', () => {
+    expect(ids(run([{ id: 'f1', text: 'x', learnedAtSceneId: 's1', usedInSceneIds: ['s2', 's3'] }]))).toEqual([])
+    expect(ids(run([{ id: 'f1', text: 'x', learnedAtSceneId: 's2', usedInSceneIds: ['s2'] }]))).toEqual([])
+    const flash = scenes.map(scene => (scene.id === 's1' ? { ...scene, timeShift: 'flashback' } : scene))
+    expect(ids(run([{ id: 'f1', text: 'x', learnedAtSceneId: 's3', usedInSceneIds: ['s1'] }], { scenes: flash }))).toEqual([])
+    expect(ids(run([{ id: 'f1', text: 'x', learnedAtSceneId: 's3', usedInSceneIds: ['sx'] }]))).toEqual([])
+  })
+
+  it('R18 notes a fact acted on but never learned, and stays quiet once an event or scene is recorded', () => {
+    const result = run([{ id: 'f1', text: 'The heir lives', usedInSceneIds: ['s2', 's3'] }])
+    expect(ids(result)).toEqual(['R18'])
+    expect(result.findings[0].kind).toBe('info')
+    expect(result.findings[0].explanation).toMatch(/and 1 other scene/)
+    expect(ids(run([{ id: 'f1', text: 'x', usedInSceneIds: ['s2'], learnedAtEventId: 'e1' }]))).toEqual([])
+    expect(ids(run([{ id: 'f1', text: 'x', usedInSceneIds: [] }]))).toEqual([])
+  })
+
+  it('does nothing for characters with no recorded knowledge, and a dismissal keeps a finding hidden', () => {
+    expect(ids(run(undefined))).toEqual([])
+    const first = run([{ id: 'f1', text: 'x', usedInSceneIds: ['s2'] }])
+    const hidden = runStoryCheck({ acts, chapters, scenes, characters: [{ id: 'c1', name: 'Mira', knowledge: [{ id: 'f1', text: 'x', usedInSceneIds: ['s2'] }] }] }, { dismissed: { [first.findings[0].fingerprint]: {} } })
+    expect(hidden.findings).toEqual([])
+    expect(hidden.dismissed).toHaveLength(1)
+  })
+})

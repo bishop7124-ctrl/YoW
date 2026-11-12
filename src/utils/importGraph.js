@@ -1,4 +1,5 @@
 import { IDEA_ENTITY_TYPES } from './ideaEntries'
+import { remapKnowledgeLinks } from './characterKnowledge'
 
 // Additive copies are independent records, not series mirrors of the source.
 const IDENTITY_FIELDS = new Set(['id', 'novelId', 'sourceNovelId', 'syncRootId', 'syncSourceId', 'syncHiddenInIds', 'syncDeleted'])
@@ -57,6 +58,9 @@ export function createImportGraph() {
           linkedCharacterId: at('characters', beat.linkedCharacterId) || '',
         })) } : {}),
       }
+    }
+    if (collection === 'characters' && Array.isArray(record.knowledge)) {
+      patch.knowledge = remapKnowledgeLinks(record.knowledge, { scenes: id => at('scenes', id), events: id => at('timeline', id) })
     }
     if (collection === 'timeline' || collection === 'worldHistory') {
       scalar('eraId', 'eras')

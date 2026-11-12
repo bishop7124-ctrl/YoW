@@ -456,6 +456,67 @@ export function rulePlotThreadUnused(input) {
 }
 
 // Info — observations only.
+// ── Character knowledge (R17, R18; Release C). Only facts the writer recorded on a character; nothing is read from
+// the prose. Only scenes in chapters placed in an act count, and a flashback or flash-forward is never compared.
+const factPreview = fact => { const text = str(fact?.text).trim(); return text.length > 80 ? `${text.slice(0, 77)}...` : text }
+
+function knowledgeFacts({ characters = [], acts = [], chapters = [], scenes = [] }) {
+  const placedChapters = new Set(chapters.filter(chapter => acts.some(act => act.id === chapter.actId)).map(chapter => chapter.id))
+  const ordered = orderedScenes({ acts, chapters, scenes }).filter(scene => placedChapters.has(scene.chapterId))
+  const position = new Map(ordered.map((scene, index) => [scene.id, index]))
+  const sceneById = new Map(ordered.map(scene => [scene.id, scene]))
+  const facts = []
+  characters.forEach(character => {
+    ;(Array.isArray(character?.knowledge) ? character.knowledge : []).forEach(fact => {
+      if (character?.id && fact?.id && str(fact.text).trim()) facts.push({ character, fact })
+    })
+  })
+  return { position, sceneById, facts }
+}
+
+// R17 — a character acts on a fact in a scene that comes before the scene where they learn it.
+export function ruleKnowledgeBeforeLearned(input) {
+  const { position, sceneById, facts } = knowledgeFacts(input)
+  const out = []
+  facts.forEach(({ character, fact }) => {
+    const learnedAt = sceneById.get(fact.learnedAtSceneId)
+    if (!learnedAt || getSceneLinks(learnedAt).timeShift) return
+    const learnedIndex = position.get(learnedAt.id)
+    const early = (Array.isArray(fact.usedInSceneIds) ? fact.usedInSceneIds : [])
+      .map(id => sceneById.get(id))
+      .filter(scene => scene && !getSceneLinks(scene).timeShift && position.get(scene.id) < learnedIndex)
+      .sort((a, b) => position.get(a.id) - position.get(b.id))[0]
+    if (!early) return
+    out.push(finding({
+      ruleId: 'R17', kind: 'possible', title: 'Acts on something before learning it',
+      explanation: `${label(character, 'A character')} acts on "${factPreview(fact)}" in ${label(early, 'a scene')}, but learns it later, in ${label(learnedAt, 'a scene')}. If they already knew it, change where they learn it. If this scene is a flashback or flash-forward, mark its order in the story.`,
+      evidence: [characterEvidence(character, factPreview(fact)), sceneEvidence(early, 'acts on it'), sceneEvidence(learnedAt, 'learns it')],
+      values: [fact.id, early.id],
+    }))
+  })
+  return out
+}
+
+// R18 — a character acts on a fact that the writer never says they learn.
+export function ruleKnowledgeNeverLearned(input) {
+  const { position, sceneById, facts } = knowledgeFacts(input)
+  const out = []
+  facts.forEach(({ character, fact }) => {
+    if (fact.learnedAtSceneId || fact.learnedAtEventId) return
+    const used = (Array.isArray(fact.usedInSceneIds) ? fact.usedInSceneIds : [])
+      .map(id => sceneById.get(id)).filter(Boolean)
+      .sort((a, b) => position.get(a.id) - position.get(b.id))
+    if (!used.length) return
+    out.push(finding({
+      ruleId: 'R18', kind: 'info', title: 'Acts on something with no recorded source',
+      explanation: `${label(character, 'A character')} acts on "${factPreview(fact)}" in ${label(used[0], 'a scene')}${used.length > 1 ? ` and ${used.length - 1} other scene${used.length === 2 ? '' : 's'}` : ''}, but you have not recorded where they learn it. Add the scene or event where they find out.`,
+      evidence: [characterEvidence(character, factPreview(fact)), ...used.slice(0, 4).map(scene => sceneEvidence(scene, 'acts on it'))],
+      values: [fact.id],
+    }))
+  })
+  return out
+}
+
 export function ruleObservations({ timeline, eras }) {
   const out = []
   const undated = timeline.filter(event => getTimelineYear(event) === null)
@@ -514,5 +575,7 @@ export const RULES = [
   { id: 'R14', name: 'Open plot threads at the end', run: rulePlotThreadOpenAtEnd },
   { id: 'R15', name: 'Long gaps in a plot thread', run: rulePlotThreadGap },
   { id: 'R16', name: 'Plot threads with no scenes', run: rulePlotThreadUnused },
+  { id: 'R17', name: 'Characters acting on something before they learn it', run: ruleKnowledgeBeforeLearned },
+  { id: 'R18', name: 'Characters acting on something with no recorded source', run: ruleKnowledgeNeverLearned },
   { id: 'I', name: 'Observations', run: ruleObservations },
 ]
