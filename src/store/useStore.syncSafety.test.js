@@ -302,3 +302,42 @@ it('allows edits after an explicit restore recreates a previously deleted projec
     id: 's', content: 'Edit after deliberate restore',
   }), { expectedRevision: 1 })
 }, 10000)
+
+it('a restore retires saves queued before it, so old records cannot be written back afterwards (AUD-23)', async () => {
+  const hook = mountAccount()
+  // Edits made just before the restore: a scene, and a project record, each waiting in a save queue.
+  act(() => hook.result.current.updateSceneContent('s', 'Edit queued before the restore'))
+  act(() => hook.result.current.updateNovel('n', { title: 'Title queued before the restore' }))
+  saveSceneDoc.mockClear()
+  mergeItems.mockClear()
+  await act(async () => {
+    await hook.result.current.replaceData({
+      novels: [{ ...project, title: 'Chosen backup' }], activeNovelId: 'n',
+      scenes: [{ ...initialScene, content: 'Backup text' }], _sceneRevisions: { s: 1 },
+    })
+  })
+  act(() => hook.result.current.finishRemoteLoad(true))
+  await act(async () => { await hook.result.current.flushPendingSync() })
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 2600)) })
+  const sentScenes = saveSceneDoc.mock.calls.map(call => call[1]?.content)
+  const sentTitles = mergeItems.mock.calls.flatMap(call => (call[2] || []).map(item => item?.title))
+  expect(sentScenes).not.toContain('Edit queued before the restore')
+  expect(sentTitles).not.toContain('Title queued before the restore')
+  expect(hook.result.current.novels[0].title).toBe('Chosen backup')
+  expect(hook.result.current.getProjectExportData('n').scenes[0].content).toBe('Backup text')
+}, 15000)
+
+it('a deletion still waiting to retry cannot delete a record the restore brings back (AUD-23)', async () => {
+  const { addPendingDelete } = await import('../utils/pendingDeletes.js')
+  const hook = mountAccount()
+  addPendingDelete('audit-owner', 'characters', 'c-restored')
+  expect((await import('../utils/pendingDeletes.js')).loadPendingDeletes('audit-owner').some(entry => entry.id === 'c-restored')).toBe(true)
+  await act(async () => {
+    await hook.result.current.replaceData({
+      novels: [project], activeNovelId: 'n', scenes: [initialScene], _sceneRevisions: { s: 1 },
+      characters: [{ id: 'c-restored', novelId: 'n', name: 'Brought back' }],
+    })
+  })
+  const { loadPendingDeletes } = await import('../utils/pendingDeletes.js')
+  expect(loadPendingDeletes('audit-owner').some(entry => entry.id === 'c-restored')).toBe(false)
+}, 15000)

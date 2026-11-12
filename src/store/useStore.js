@@ -175,6 +175,13 @@ const clearProjectRefs = (refs) => {
 // instead of re-parsing/re-diffing the whole collection every time.
 // A character with the deleted scenes, chapters, events or characters taken out of its journey beats and its
 // recorded knowledge. Returns the same object when there is nothing to clear.
+// Cloud table to the data key its records have in a backup, for forgetting deletions a restore undoes.
+const TABLE_TO_DATA_KEY_FOR_RESTORE = {
+  novels: 'novels', series_items: 'series', characters: 'characters', factions: 'factions', locations: 'locations',
+  timeline_events: 'timeline', world_history: 'worldHistory', acts: 'acts', chapters: 'chapters', lore_entries: 'loreEntries',
+  idea_entries: 'ideaEntries', maps_data: 'maps', whiteboards_data: 'whiteboards', story_schedule: 'storySchedule',
+  rpg_characters: 'rpgCharacters', comic_pages: 'comicPages', comic_panels: 'comicPanels', eras: 'eras',
+}
 const clearCharacterLinks = (character, { sceneIds = [], chapterIds = [], timelineEventIds = [], characterIds = [] } = {}) => {
   let next = character
   if (next.journey) next = { ...next, journey: clearJourneyLinks(next.journey, { sceneIds, chapterIds, timelineEventIds, characterIds }) }
@@ -520,6 +527,8 @@ function debounce(fn, ms) {
     clearTimeout(timer)
     timer = setTimeout(() => { pendingArgs = null; fn(...args) }, ms)
   }
+  // Drops a pending call without running it (a restore retires save intent made before it).
+  debounced.cancel = () => { clearTimeout(timer); pendingArgs = null }
   // Immediately runs any pending call instead of waiting out the delay, so a
   // caller (e.g. sign-out) can await the in-flight write before it's too late
   // to send it with a still-valid auth session.
@@ -2171,6 +2180,24 @@ export function useStore(userId = null, options = {}) {
           ? { ...item, projectOrder: item.projectOrder.filter(id => !restoringDeletedIds.has(id)) } : item) })
     }
     await Promise.allSettled(retiredSceneIds.map(id => sceneSaveQueueRef.current.get(id)).filter(Boolean))
+    // Queue barrier (audit AUD-23): everything queued before this restore describes the account as it was, so it is
+    // retired, and work already in flight finishes first. Otherwise a save debounced two seconds before the restore
+    // could re-insert old records after the replacement, or overwrite restored ones.
+    {
+      const itemState = itemSyncRef.current
+      const inFlight = [...itemState.inFlight.values()]
+      for (const table of [...itemState.latest.keys()]) debouncedSaveItems.cancel(table)
+      itemState.timers.forEach(timer => clearTimeout(timer))
+      itemState.timers.clear(); itemState.attempts.clear(); itemState.latest.clear()
+      const sceneIds = [...sceneSyncRef.current.latest.keys()]
+      sceneIds.forEach(sceneId => debouncedSaveScene.cancel(sceneId))
+      debouncedSaveSettings.cancel()
+      await Promise.allSettled([...inFlight, ...sceneSaveQueueRef.current.values()])
+      // A deletion still waiting to retry for a record the backup brings back would delete the restored copy.
+      Object.entries(TABLE_TO_DATA_KEY_FOR_RESTORE).forEach(([table, key]) => {
+        if (Array.isArray(data[key])) forgetRestoredDeletes(userId, table, data[key].map(item => item?.id).filter(Boolean))
+      })
+    }
     // Commit the selected replacement to cloud storage before changing the
     // rendered/local copy. The RPC is one database transaction, so failure
     // leaves both sides on their previous version and can be reported to the
