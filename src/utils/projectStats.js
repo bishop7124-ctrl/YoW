@@ -1,4 +1,5 @@
 import { getProjectType } from '../constants/projectTypes'
+import { inWorldEntries } from './references.js'
 import { wordCount } from './projectExportHelpers'
 
 const scoped = (items, projectId) => (items || []).filter(item => item.novelId === projectId)
@@ -71,7 +72,7 @@ export const buildProjectStats = (project, data) => {
   // they're a two-tab safety net, not real manuscript content, and would otherwise
   // double-count words.
   const scenes = scoped(data.scenes, projectId).filter(scene => !scene.conflictOf)
-  const loreEntries = scoped(data.loreEntries, projectId)
+  const loreEntries = inWorldEntries(scoped(data.loreEntries, projectId))
   const ideaEntries = scoped(data.ideaEntries, projectId)
   const maps = scoped(data.maps, projectId)
   const whiteboard = scoped(data.whiteboards, projectId)[0]?.whiteboard || { notes: [], groups: [] }

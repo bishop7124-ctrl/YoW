@@ -120,3 +120,21 @@ describe('makeSnippet', () => {
     expect(makeSnippet('nothing here', ['zzz'])).toBeNull()
   })
 })
+
+describe('references in search', () => {
+  const withRefs = { ...store, referenceEntries: [{ id: 'r1', novelId: 'n1', title: 'Granary design', citation: 'Smith 2001', content: 'Raised on staddle stones.' }, { id: 'rx', novelId: 'other', title: 'Granary elsewhere' }] }
+  it('indexes the active project\'s references as their own type, with citation and notes searchable', () => {
+    const idx = buildSearchIndex(withRefs)
+    const hits = searchIndex(idx, 'staddle')
+    expect(hits.map(h => [h.type, h.id])).toEqual([['reference', 'r1']])
+    expect(searchIndex(idx, 'Smith 2001').some(h => h.id === 'r1')).toBe(true)
+    expect(searchIndex(idx, 'granary').map(h => h.id)).toEqual(['r1'])
+  })
+  it('leaves them out when the References room is not among the enabled sections', () => {
+    const idx = buildSearchIndex(withRefs, { enabledSections: new Set(['lore', 'characters']) })
+    expect(searchIndex(idx, 'granary')).toEqual([])
+  })
+  it('does not mix them into lore results', () => {
+    expect(searchIndex(buildSearchIndex(withRefs), 'granary').some(h => h.type === 'lore')).toBe(false)
+  })
+})

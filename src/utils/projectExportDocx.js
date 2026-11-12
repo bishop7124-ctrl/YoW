@@ -1,4 +1,5 @@
 import { createMapExportEntries } from './projectExportMaps.js'
+import { inWorldEntries } from './references.js'
 import {
   cleanText, formatDate, sortByOrder, sortByTitle,
   isCampaignProject, isComicProject, sessionExportRows, outlineStoryEventLabel,
@@ -496,17 +497,17 @@ const getProjectDocxCategoryData = (projectData) => {
     {
       label: 'Lore',
       data: withProjectSections(projectData, ['lore'], {
-        loreEntries: projectData.loreEntries ?? [],
+        loreEntries: inWorldEntries(projectData.loreEntries),
         characters: projectData.characters ?? [],
         locations: projectData.locations ?? [],
       }),
-      include: enabled.has('lore') && Boolean(projectData.loreEntries?.length),
+      include: enabled.has('lore') && Boolean(inWorldEntries(projectData.loreEntries).length),
     },
     {
       label: 'Notes',
       data: withProjectSections(projectData, ['ideas'], {
         ideaEntries: projectData.ideaEntries ?? [], characters: projectData.characters ?? [], locations: projectData.locations ?? [],
-        factions: projectData.factions ?? [], loreEntries: projectData.loreEntries ?? [], timeline: projectData.timeline ?? [], chapters: projectData.chapters ?? [],
+        factions: projectData.factions ?? [], loreEntries: inWorldEntries(projectData.loreEntries), timeline: projectData.timeline ?? [], chapters: projectData.chapters ?? [],
       }),
       include: enabled.has('ideas') && Boolean(projectData.ideaEntries?.length),
     },

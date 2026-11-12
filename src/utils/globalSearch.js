@@ -6,6 +6,7 @@ export const SEARCH_TYPES = {
   faction: { label: 'Factions', singular: 'Faction', section: 'factions' },
   location: { label: 'Locations', singular: 'Location', section: 'locations' },
   lore: { label: 'Lore', singular: 'Lore', section: 'lore' },
+  reference: { label: 'References', singular: 'Reference', section: 'references' },
   timeline: { label: 'Timeline', singular: 'Timeline event', section: 'timeline' },
   history: { label: 'History', singular: 'History', section: 'worldhistory' },
   schedule: { label: 'Schedule', singular: 'Schedule event', section: 'schedule' },
@@ -15,7 +16,7 @@ export const SEARCH_TYPES = {
   act: { label: 'Acts', singular: 'Act', section: null },
   map: { label: 'Maps', singular: 'Map', section: 'map' },
 }
-export const SEARCH_TYPE_ORDER = ['character', 'faction', 'location', 'lore', 'timeline', 'history', 'schedule', 'idea', 'scene', 'chapter', 'act', 'map']
+export const SEARCH_TYPE_ORDER = ['character', 'faction', 'location', 'lore', 'reference', 'timeline', 'history', 'schedule', 'idea', 'scene', 'chapter', 'act', 'map']
 
 const MAX_FIELD_CHARS = 200_000
 const SNIPPET_RADIUS = 60
@@ -83,6 +84,8 @@ export function buildSearchIndex(store, { enabledSections = null } = {}) {
     field('Description', l.description), field('Tags', l.tags),
   ]))
   inProject(store.loreEntries).forEach(e => add('lore', e, e.title, e.category, [field('Entry', e.content), field('Tags', e.tags)]))
+  // References are real-world research, kept out of the world's lore; they appear in search only where the References room is on.
+  inProject(store.referenceEntries).forEach(e => add('reference', e, e.title, e.citation || e.sourceUrl, [field('Notes', e.content), field('Citation', e.citation), field('Source', e.sourceUrl), field('Tags', e.tags)]))
   inProject(store.timeline).forEach(e => add('timeline', e, e.title, e.date, [field('Description', e.description), field('Tags', e.tags)]))
   inProject(store.worldHistory).forEach(e => add('history', e, e.title, e.dateRange, [field('Entry', e.content), field('Tags', e.tags)]))
   inProject(store.storySchedule).forEach(e => add('schedule', e, e.title, '', [field('Description', e.description), field('Tags', e.tags)]))

@@ -1,4 +1,5 @@
 import { getExportPdfTheme } from './projectExportThemes.js'
+import { inWorldEntries } from './references.js'
 import { getProjectType } from '../constants/projectTypes.js'
 import { normalizeFactionLogo } from '../components/Factions/logoData.js'
 import {
@@ -503,7 +504,7 @@ const relatedEntries = (source, projectData, sourceType) => {
   ;(projectData.factions ?? []).forEach(item => {
     if (sourceType !== 'faction' && shareAny(tags, getTags(item))) add('Faction', item.name, 'Factions', item)
   })
-  ;(projectData.loreEntries ?? []).forEach(item => {
+  ;inWorldEntries(projectData.loreEntries).forEach(item => {
     if (sourceType !== 'lore' && shareAny(tags, getTags(item))) add('Lore', item.title, 'Lore', item)
   })
   ;(projectData.timeline ?? []).forEach(item => {
@@ -1709,7 +1710,7 @@ const makeProjectPages = (projectData, theme) => {
         ['Relationships', getRelationshipExportRows(projectData.characters ?? [], enabled).length, enabled.has('familytree') || enabled.has('relationships')],
         ['Factions', projectData.factions?.length ?? 0, enabled.has('factions')],
         ['Locations', projectData.locations?.length ?? 0, enabled.has('locations')],
-        ['Lore', projectData.loreEntries?.length ?? 0, enabled.has('lore')],
+        ['Lore', inWorldEntries(projectData.loreEntries).length, enabled.has('lore')],
         ['Timeline', projectData.timeline?.length ?? 0, enabled.has('timeline')],
         ['World History', projectData.worldHistory?.length ?? 0, enabled.has('worldhistory')],
         ['Schedule', projectData.storySchedule?.length ?? 0, enabled.has('schedule')],

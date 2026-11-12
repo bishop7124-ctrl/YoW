@@ -26,6 +26,7 @@ export function openRecord(store, { type, id }) {
       return true
     }
     case 'faction': switchSection('factions', id); return true
+    case 'reference': switchSection('references', id); return true
     case 'schedule': switchSection('schedule', id); return true
     case 'idea': store.setSelectedIdeaEntryId?.(id); switchSection('ideas'); return true
     case 'history': store.setSelectedHistoryEntryId?.(id); switchSection('worldhistory'); return true

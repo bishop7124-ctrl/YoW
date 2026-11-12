@@ -9,6 +9,9 @@ const GlobalSearch = lazy(() => import('./search/GlobalSearch'))
 const RelationshipMap = lazy(() => import('./relationships/RelationshipMap'))
 import Factions from './Factions/Factions'
 import Lore from './lore/Lore'
+import References from './references/References'
+import ReferencesDrawer from './references/ReferencesDrawer'
+import { useFeatureFlag } from '../utils/useFeatureFlag'
 import IdeasKanban from './ideas/IdeasKanban'
 import Timeline from './timeline/Timeline'
 const WorldHistory = lazy(() => import('./worldhistory/WorldHistory'))
@@ -83,6 +86,7 @@ function Icon({ name, size = 16 }) {
     timeline: <><path d="M4 5v14" /><circle cx="4" cy="5" r="1.5" /><circle cx="4" cy="12" r="1.5" /><circle cx="4" cy="19" r="1.5" /><path d="M8 5h12" /><path d="M8 12h9" /><path d="M8 19h12" /></>,
     worldhistory: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18" /><path d="M12 3a14 14 0 0 1 0 18" /><path d="M12 3a14 14 0 0 0 0 18" /></>,
     map: <><path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z" /><path d="M9 4v13" /><path d="M15 7v13" /></>,
+    references: <><path d="M6 3h12v18l-6-4-6 4z" /><path d="M9 8h6" /></>,
     note: <><path d="M5 4h14v16H5z" /><path d="M8 8h8" /><path d="M8 12h8" /><path d="M8 16h5" /></>,
     schedule: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4" /><path d="M8 2v4" /><path d="M3 10h18" /><path d="M8 14h.01" /><path d="M12 14h.01" /><path d="M16 14h.01" /><path d="M8 18h.01" /><path d="M12 18h.01" /></>,
     characterbuilder: <><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></>,
@@ -118,6 +122,7 @@ const ALL_SECTIONS = [
   { id: 'factions',     label: 'Factions',     icon: 'factions' },
   { id: 'locations',    label: 'Locations',    icon: 'locations' },
   { id: 'lore',         label: 'Lore',         icon: 'lore' },
+  { id: 'references',   label: 'References',   icon: 'references' },
   { id: 'ideas',        label: 'Idea Board',   icon: 'ideas' },
   { id: 'schedule',     label: 'Schedule',     icon: 'schedule' },
   { id: 'timeline',     label: 'Timeline',     icon: 'timeline' },
@@ -133,6 +138,7 @@ const STUDIO_ROOMS = [
   { id: 'characters',        label: 'Characters',        icon: 'characters',        sections: ['characters', 'relationships', 'familytree', 'factions'] },
   { id: 'atlas',             label: 'Atlas',             icon: 'atlas',             sections: ['locations', 'map'] },
   { id: 'lore',              label: 'Lore',              icon: 'lore',              sections: ['lore', 'timeline', 'worldhistory'] },
+  { id: 'references',       label: 'References',        icon: 'references',        sections: ['references'] },
   { id: 'party',             label: 'Party',             icon: 'characterbuilder',  sections: ['characterbuilder'], ttrpgOnly: true },
   { id: 'aitools',           label: 'AI Tools',          icon: 'aitools',           sections: ['aitools'] },
 ]
@@ -923,7 +929,9 @@ export default function Layout({
   const projectTypeCfg = getProjectType(store.activeNovel?.type)
   const projectTypeLabel = projectTypeCfg.label
   const enabledSectionIds = new Set(getEnabledSections(store.activeNovel))
-  const planningSections = ALL_SECTIONS.filter(s => s.id === 'dashboard' || enabledSectionIds.has(s.id))
+  // References is its own room, offered to every project type while the `references` flag is on.
+  const referencesEnabled = useFeatureFlag('references')
+  const planningSections = ALL_SECTIONS.filter(s => s.id === 'dashboard' || (s.id === 'references' ? referencesEnabled : enabledSectionIds.has(s.id)))
   const isFreePlan = membership?.isFree
   const isSectionLockedForFree = useCallback(
     (sectionId) => Boolean(isFreePlan && FREE_LOCKED_SECTIONS.has(sectionId)),
@@ -933,6 +941,7 @@ export default function Layout({
   const [aiOpen, setAiOpen] = useState(false)
   const [recordConflictReviewOpen, setRecordConflictReviewOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [referencesOpen, setReferencesOpen] = useState(false)
   const isMobileViewport = useIsMobile()
   const [openSectionTourId, setOpenSectionTourId] = useState(null)
 
@@ -993,13 +1002,19 @@ export default function Layout({
         (meta && event.shiftKey && key === 'f') ||
         (meta && !event.shiftKey && !event.altKey && key === 'k' && viewMode !== 'writing') ||
         (!meta && !event.altKey && event.key === '/' && !typing)
+      // References drawer: "R" outside text fields, from any room (only while the flag is on).
+      if (!wantsSearch && referencesEnabled && !meta && !event.altKey && !event.shiftKey && key === 'r' && !typing) {
+        event.preventDefault()
+        setReferencesOpen(open => !open)
+        return
+      }
       if (!wantsSearch) return
       event.preventDefault()
       setSearchOpen(open => !open)
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [viewMode])
+  }, [viewMode, referencesEnabled])
 
   useEffect(() => {
     const handleTeleport = (e) => {
@@ -1054,6 +1069,7 @@ export default function Layout({
     factions:     <Factions key={referenceTarget?.section === 'factions' ? referenceTarget.id : 'default'} initialEntryId={referenceTarget?.section === 'factions' ? referenceTarget.id : null} store={store} />,
     locations:    <Locations store={store} />,
     lore:         <Lore store={store} />,
+    references:   <References key={referenceTarget?.section === 'references' ? referenceTarget.id : 'default'} initialEntryId={referenceTarget?.section === 'references' ? referenceTarget.id : null} store={store} />,
     ideas:        <IdeasKanban store={store} userId={userId} membership={membership} />,
     schedule:     <ScheduleCalendar key={referenceTarget?.section === 'schedule' ? referenceTarget.id : 'default'} initialEntryId={referenceTarget?.section === 'schedule' ? referenceTarget.id : null} store={store} />,
     timeline:     <Timeline store={store} />,
@@ -1142,6 +1158,19 @@ export default function Layout({
             >
               <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
             </button>
+            {referencesEnabled && (
+              <button
+                type="button"
+                className={`studio-utility-btn${referencesOpen ? ' is-active' : ''}`}
+                onClick={() => setReferencesOpen(open => !open)}
+                aria-label="Open references"
+                aria-pressed={referencesOpen}
+                aria-keyshortcuts="r"
+                title="References ( R )"
+              >
+                <Icon name="references" size={14} />
+              </button>
+            )}
             {localModeBubble && (
               <button
                 type="button"
@@ -1274,9 +1303,20 @@ export default function Layout({
         </StudioWorkspace>
       </StudioFrame>
 
+      {referencesEnabled && referencesOpen && (
+        <ReferencesDrawer
+          store={store}
+          onClose={() => setReferencesOpen(false)}
+          onOpenRoom={entryId => {
+            setReferencesOpen(false)
+            window.dispatchEvent(new CustomEvent('switch-section', { detail: { section: 'references', entryId: entryId || undefined } }))
+          }}
+        />
+      )}
+
       {searchOpen && (
         <Suspense fallback={null}>
-          <GlobalSearch store={store} enabledSectionIds={enabledSectionIds} onClose={() => setSearchOpen(false)} />
+          <GlobalSearch store={store} enabledSectionIds={referencesEnabled ? new Set([...enabledSectionIds, 'references']) : enabledSectionIds} onClose={() => setSearchOpen(false)} />
         </Suspense>
       )}
 

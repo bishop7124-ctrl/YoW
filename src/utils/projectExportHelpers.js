@@ -1,4 +1,5 @@
 import { getProjectType, getStoryEventIndicators } from '../constants/projectTypes.js'
+import { inWorldEntries } from './references.js'
 import { isDesktopAppRuntime } from './runtime.js'
 import { SESSION_PLAN_FIELDS, SESSION_RECAP_FIELDS, buildOutlineModel } from './outlineDisplay.js'
 
@@ -163,7 +164,7 @@ export const buildSummaryStats = (projectData) => {
   return [
     ['Characters', projectData.characters?.length ?? 0],
     ['Locations', projectData.locations?.length ?? 0],
-    ['Lore entries', projectData.loreEntries?.length ?? 0],
+    ['Lore entries', inWorldEntries(projectData.loreEntries).length],
     ['Timeline events', projectData.timeline?.length ?? 0],
     [`${workspaceLabel} words`, scenes.reduce((sum, scene) => sum + wordCount(scene.content), 0).toLocaleString()],
   ]

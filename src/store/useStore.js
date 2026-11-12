@@ -2,6 +2,7 @@ import { wasAccountDeleted, deletedAccountStorageKeys } from '../utils/accountLo
 import { createAccountStorageQueue } from '../storage/accountStorageQueue'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { upsertItems as writeCloudItems, mergeItems as mergeCloudItems, deleteItem, deleteProjectData, replaceUserData, saveUserSettings as writeCloudSettings, saveSceneDoc as writeCloudScene, deleteSceneDoc, getUserStorageUsage, fetchPlotThreads } from '../utils/firestoreSync'
+import { inWorldEntries, isReference, referenceEntries, referenceFields, REFERENCE_KIND } from '../utils/references'
 import { buildProjectStats } from '../utils/projectStats'
 import { getProjectType } from '../constants/projectTypes'
 import { estimateStoreSize } from '../utils/storageQuota'
@@ -2494,7 +2495,7 @@ export function useStore(userId = null, options = {}) {
       locations: resolveSeriesScope(locations, 'locations', projectId),
       timeline: resolveSeriesScope(timeline, 'timeline', projectId),
       worldHistory: resolveSeriesScope(worldHistory, 'worldhistory', projectId),
-      loreEntries: resolveSeriesScope(loreEntries, 'lore', projectId),
+      loreEntries: inWorldEntries(resolveSeriesScope(loreEntries, 'lore', projectId)),
       ideaEntries: resolveSeriesScope(ideaEntries, 'ideas', projectId),
       acts: acts.filter(a => a.novelId === projectId).sort((a, b) => a.order - b.order),
       chapters: chapters.filter(c => c.novelId === projectId).sort((a, b) => a.order - b.order),
@@ -2514,7 +2515,7 @@ export function useStore(userId = null, options = {}) {
     locations: asStatsOwned(resolveSeriesScope(locations, 'locations', projectId), projectId),
     timeline: asStatsOwned(resolveSeriesScope(timeline, 'timeline', projectId), projectId),
     worldHistory: asStatsOwned(resolveSeriesScope(worldHistory, 'worldhistory', projectId), projectId),
-    loreEntries: asStatsOwned(resolveSeriesScope(loreEntries, 'lore', projectId), projectId),
+    loreEntries: asStatsOwned(inWorldEntries(resolveSeriesScope(loreEntries, 'lore', projectId)), projectId),
     ideaEntries: asStatsOwned(resolveSeriesScope(ideaEntries, 'ideas', projectId), projectId),
   })
 
@@ -2544,10 +2545,14 @@ export function useStore(userId = null, options = {}) {
     () => seriesScope(worldHistory, 'worldhistory'),
     [worldHistory, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
   )
-  const novelLoreEntries = useMemo(
+  // References (kind 'reference') live in the lore list for storage, sync and backup, but the app is handed only
+  // in-world lore, so a reference never reaches the Lore room, name highlighting, scene links, AI context or exports.
+  const scopedLore = useMemo(
     () => seriesScope(loreEntries, 'lore'),
     [loreEntries, novels, series, activeNovelId] // eslint-disable-line react-hooks/exhaustive-deps -- seriesScope is a fresh closure every render; its real inputs are listed here
   )
+  const novelLoreEntries = useMemo(() => inWorldEntries(scopedLore), [scopedLore])
+  const novelReferences = useMemo(() => referenceEntries(scopedLore), [scopedLore])
   // factions/ideaEntries don't currently feed any memo comparator the way the three
   // above (and characters/locations) do, so they're deliberately left unmemoized here
   // — same scope decision as novelFactions/novelIdeaEntries noted in ROADMAP.md.
@@ -3619,6 +3624,18 @@ export function useStore(userId = null, options = {}) {
     return entry
   }
   const updateLoreEntry = (id, data) => saveSeriesSyncedItem(loreEntriesRef, setLoreEntries, 'lore', data, id, () => ({ id: uid(), novelId: activeNovelId, createdAt: Date.now(), characterIds: [], category: '', content: '', ...data }))
+  // References (Release C, C2): real-world sources stored as lore entries marked `kind: 'reference'`.
+  const addReference = (data) => addLoreEntry({ ...referenceFields(data), kind: REFERENCE_KIND })
+  const updateReference = (id, data) => {
+    if (!isReference(loreEntriesRef.current.find(entry => entry.id === id))) return null
+    const fields = referenceFields(data)
+    return updateLoreEntry(id, Object.fromEntries(Object.entries(fields).filter(([key]) => Object.hasOwn(data || {}, key))))
+  }
+  // Moves a reference into the world's lore (it then appears in the Lore room, name highlighting and exports).
+  const convertReferenceToLore = (id) => {
+    if (!isReference(loreEntriesRef.current.find(entry => entry.id === id))) return null
+    return updateLoreEntry(id, { kind: 'lore' })
+  }
   const deleteLoreEntry = (id, options = {}) => {
     const deletedIds = deleteSeriesSyncedItem(loreEntriesRef, setLoreEntries, 'lore', id, options)
     if (!deletedIds.length) return false
@@ -4875,6 +4892,7 @@ export function useStore(userId = null, options = {}) {
     plotThreadsSyncStage: !canSyncCloud ? 'off (this account is not syncing to the cloud)' : mainLoadFinishedFor !== userId ? 'waiting for your account to finish loading' : plotThreadsReadyFor !== userId ? 'checking your account for saved threads' : 'ready', addPlotThread, updatePlotThread, deletePlotThread, loadPlotThreadsFromCloud,
     currentYear: activeNovel?.currentYear ?? currentYear, updateCurrentYear,
     loreEntries: novelLoreEntries, addLoreEntry, updateLoreEntry, deleteLoreEntry,
+    referenceEntries: novelReferences, addReference, updateReference, convertReferenceToLore,
     ideaEntries: novelIdeaEntries, addIdeaEntry, updateIdeaEntry, moveIdeaEntry, deleteIdeaEntry,
     whiteboard, updateWhiteboard, mapProject, updateMapProject, addMap, selectMap, deleteMap, renameMap, updateActiveMapData, updateMapData,
     addLocation: saveLocation,
