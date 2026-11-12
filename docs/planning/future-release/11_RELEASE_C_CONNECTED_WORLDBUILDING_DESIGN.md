@@ -60,10 +60,10 @@ C1a to C1d, C2 and C4 need no migration. C3 needs one table, written exactly lik
 | # | Decision | Status |
 | --- | --- | --- |
 | D17 | Aliases on which record types | **Agreed 2026-11-12:** characters, locations, lore, history, timeline events and **factions**. Ideas later, if asked. The resolver already supports factions; the editor passes them in once alias support is switched on (C1b), so nothing changes before then. |
-| D18 | How explicit references are stored | **Open.** Recommendation: a list on the scene (Option A). Visual comparison shown to the owner 2026-11-12. |
+| D18 | How explicit references are stored | **Agreed 2026-11-12: Option A.** A list on the scene (`entityRefs`), shown in the Inspector as "This scene is about" chips with "Link a record" and suggestions. The manuscript text is never touched. |
 | D19 | Where research lives | **Agreed 2026-11-12:** its own **References** area, and reachable from anywhere. Built as a room of its own plus a slide-over References drawer openable from any room (topbar button and shortcut), so a writer can look something up without leaving the manuscript. Stored as Lore entries with `kind: 'reference'` (shares editor, sync, export and search) but shown only in References, never in the Lore room or in-world exports by default. |
-| D20 | Character knowledge | **Open.** Explained to the owner 2026-11-12. |
-| D21 | Document attachments (C5) | **Agreed in principle 2026-11-12: paid plans only.** Details confirmed when it is built: a per-file cap (proposed 10 MB), allowed types (PDF, DOCX, plain text, images), counting toward the storage allowance, inclusion in backups, and a decision on scanning uploads. Free accounts keep links, citations and notes. |
+| D20 | Character knowledge | **Agreed 2026-11-12: build it** (C3), optional, behind its own flag, after C1 and C2. One new table. Cut it if the earlier steps show little use. |
+| D21 | Document attachments (C5) | **Agreed 2026-11-12: paid plans only, 10 MB per file, and every upload is scanned.** Still to settle when it is built: allowed types (proposed PDF, DOCX, plain text, images), counting toward the storage allowance, and inclusion in backups. Free accounts keep links, citations and notes. **C5 is blocked on the upload scanning pipeline** (ROADMAP Security row "Upload scanning and validation" and owner queue row 14), which also covers every existing upload area. |
 
 ## 6. Risks and how they are handled
 
