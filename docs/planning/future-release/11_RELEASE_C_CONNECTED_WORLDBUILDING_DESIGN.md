@@ -95,6 +95,18 @@ The Story links panel (A4) gained three groups, **Lore, Factions and History**, 
 
 Not done: Story Check does not yet report a dangling link of these three types (delete cleanup already removes them, so it is a safety net only).
 
-## 10. Next
+## 10. C2 as built (2026-11-12)
+
+Behind the new `references` flag (off for everyone). Real-world sources are stored as lore entries marked `kind: 'reference'` with a `sourceUrl`, `citation` and the writer's notes in `content`. Because they share the lore table, sync, backup and restore need no new work.
+
+- **A room of its own:** References sits on the room rail (not inside Lore). A list with search, a detail view labelled "Reference · not part of your world", and Edit, Move to Lore and Delete (each confirmed).
+- **Reachable from anywhere:** a slide-over drawer opened from a top-bar button or the **R** key (outside text fields), in every room including the manuscript. Search, read a reference, add a new one, or "Open in References". Escape closes it.
+- **Kept out of the world:** the store hands the rest of the app only in-world lore, so a reference never appears in the Lore room, manuscript name highlighting, scene links, AI context, dashboard counts, or the readable exports (DOCX, PDF, encyclopaedia). **Backups keep every entry, references included**, so a restore loses nothing. Search shows them as their own type, only where the room is on.
+- **Safe links:** only http and https addresses are stored or shown; `javascript:` and similar are refused at save and again at display.
+- **Move to Lore:** turns a reference into an ordinary lore entry (it then appears in the Lore room, highlighting and exports).
+
+Not done: a way to include references in a readable export on request (they are excluded by default as agreed); linking a reference to a scene or record; attachments (C5, on hold). A reference whose project is a series shared record follows lore's series rules.
+
+## 11. Next
 
 C1c needs no work (the hover preview already exists). **C1d** is next, and it extends the existing "Story links" panel (A4) instead of adding a second one: that panel already links characters, places and timeline events to a scene. C1d adds three more groups to it, **Lore entries, Factions and History entries**, stored as `scene.entityRefs`, with suggestions from names and other names in the scene text, removal when the record is deleted, and id remapping on import and merge. Characters, places and events keep their A4 fields, so nothing is stored twice. Behind `connected_refs`.

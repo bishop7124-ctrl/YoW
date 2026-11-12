@@ -983,7 +983,9 @@ export default function Layout({
 
   // Redirect away from a section that just got disabled
   useEffect(() => {
-    if (viewMode === 'planning' && section !== 'dashboard' && !enabledSectionIds.has(section)) {
+    // 'references' is governed by its own flag, not the project's section list, so it is never redirected here
+    // (a page reload on it would otherwise bounce to the Outline before the flag has loaded).
+    if (viewMode === 'planning' && section !== 'dashboard' && section !== 'references' && !enabledSectionIds.has(section)) {
       const first = planningSections.find(s => s.id !== 'dashboard')
       if (first) setSection(first.id)
     }
