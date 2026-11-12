@@ -78,6 +78,17 @@ C1a to C1d, C2 and C4 need no migration. C3 needs one table, written exactly lik
 
 `src/utils/entityResolver.js` and its tests (9). `Manuscript.jsx` now builds its name map through `buildEntityIndex`. A test pins the old map for a representative project, so a behaviour difference would fail loudly. No UI change; nothing for the owner to do.
 
-## 8. Next
+## 8. C1b as built (2026-11-11)
 
-C1b (alias fields and the collision warning, behind `connected_refs`) is the next build step.
+Behind the new `connected_refs` flag (off for everyone). An **Other names** field in the location, lore, faction, timeline and history editors (`src/components/shared/AliasesField.jsx`), and a quiet clash warning under any name or alias already used by another record. Characters keep their existing Alias / Keywords field (it already worked as aliases) and gain the warning only (`AliasClashNotes`). Decisions made while building:
+
+- A history entry and the timeline event linked to it are one chronicle record shown in two places, so they never count as a clash with each other, and `aliases` is one of the fields mirrored between them.
+- Saving a record the writer gave no other names to adds no `aliases` field to it (`withAliasField`), so nothing changes for anyone while the flag is off.
+- Factions are recognised in the manuscript text only while the flag is on; every other change is invisible without aliases.
+- The warning never blocks saving. It says the manuscript can link that name to only one of the records.
+
+Browser-checked in a scratch copy: field renders, chips add on Enter and comma, the clash warning shows, and the aliases survive save and reopen.
+
+## 9. Next
+
+C1c: hover preview on recognised names in the editor and read view.
