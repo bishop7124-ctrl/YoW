@@ -345,7 +345,7 @@ export function buildNotice({ track, noticeKey, daysLeft, deadline = null, siteU
   } else {
     const when = toDate(deadline) ? formatDate(toDate(deadline)) : `${GRACE_DAYS} days from the date of this email`
     lines.push('Your free YOW account has not been used for 18 months.')
-    lines.push(`Log in by ${when}, or on ${when} your account and all its data will be deleted. Logging in once is enough to keep it exactly as it is.`)
+    lines.push(`Log in by ${when}, or on ${when} your account will be locked and, 30 days later, deleted with all its data. Logging in once before then is enough to keep it exactly as it is, and if it has been locked, reply to this email within the 30 days and we will restore it.`)
     lines.push(entry.final
       ? 'Before then you can also export everything so you have your own copy, using the instructions below.'
       : 'You can also export all your projects at any time so you have your own copy, using the instructions below.')

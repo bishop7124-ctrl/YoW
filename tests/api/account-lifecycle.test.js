@@ -199,7 +199,7 @@ describe('account lifecycle: free-account notice wording', () => {
 
   it('states the exact log-in-by / deleted-on date in every free notice', () => {
     for (const { key } of NOTICE_SCHEDULE[TRACKS.FREE_INACTIVE]) {
-      expect(notice(key).text).toContain('Log in by 15 March 2027, or on 15 March 2027 your account and all its data will be deleted.')
+      expect(notice(key).text).toContain('Log in by 15 March 2027, or on 15 March 2027 your account will be locked and, 30 days later, deleted with all its data.')
     }
   })
 
@@ -288,7 +288,7 @@ vi.mock('@supabase/supabase-js', () => ({
     auth: { admin: { listUsers: (...a) => listUsers(...a), getUserById: (...a) => getUserById(...a), deleteUser: (...a) => deleteUserSpy(...a), updateUserById: (...a) => updateSpy(...a) } },
     storage: { from: () => ({ list: (...a) => storageList(...a), remove: (...a) => storageRemove(...a) }) },
     from: () => ({
-      select: () => ({ in: () => eventRows() }),
+      select: () => ({ in: () => eventRows(), eq: () => Promise.resolve({ data: [], error: null }) }),
       insert: (...a) => insertSpy(...a),
       upsert: (...a) => upsertSpy(...a),
       update: (...a) => { updateRowSpy(...a); const chain = { eq: () => chain, error: null }; return chain },
@@ -744,107 +744,6 @@ describe('run-account-lifecycle send + archive (gated)', () => {
       const body = await run({ archive: '1' })
       expect(body.archive).toMatchObject({ archived: 0 }) // old final notice does not unlock archiving
       expect(updateSpy).not.toHaveBeenCalled()
-    })
-  })
-
-  describe('free-account deletion', () => {
-    const enable = () => { process.env.ACCOUNT_LIFECYCLE_DELETE_FREE = 'true' }
-
-    it('records the audit row, removes stored media, then deletes the account, in that order', async () => {
-      const u = inactive(UID1, 95)
-      listUsers.mockResolvedValue({ data: { users: [u] }, error: null })
-      getUserById.mockResolvedValue({ data: { user: u }, error: null })
-      eventRows.mockResolvedValue({ data: FREE_READY(UID1), error: null })
-      storageList
-        .mockResolvedValueOnce({ data: [{ name: 'a.png', id: 'f1' }, { name: 'projects', id: null }], error: null })
-        .mockResolvedValueOnce({ data: [{ name: 'b.png', id: 'f2' }], error: null })
-      const order = []
-      upsertSpy.mockImplementation(async () => { order.push('audit'); return { error: null } })
-      storageRemove.mockImplementation(async () => { order.push('media'); return { error: null } })
-      deleteUserSpy.mockImplementation(async () => { order.push('user'); return { error: null } })
-      enable()
-      const body = await run({ delete: '1' })
-      expect(order).toEqual(['audit', 'media', 'user'])
-      expect(body.mode).toBe('delete')
-      expect(body.deletion).toMatchObject({ deleted: 1, failed: 0, skipped: 0, maxPerRun: 10 })
-      expect(storageRemove).toHaveBeenCalledWith([`${UID1}/a.png`, `${UID1}/projects/b.png`])
-      expect(storageList.mock.calls[0][0]).toBe(UID1)
-      expect(deleteUserSpy).toHaveBeenCalledWith(UID1)
-      expect(deleteSpy).toHaveBeenCalledWith('user_id', UID1) // scenes have no FK cascade
-      expect(upsertSpy.mock.calls[0][0]).toMatchObject({ user_id: UID1, track: 'free_inactive' })
-      expect(updateRowSpy.mock.calls[0][0]).toHaveProperty('completed_at')
-      expect(JSON.stringify(body)).not.toMatch(/@x\.test/)
-    })
-
-    it('does not delete without a final notice recorded 7+ days ago', async () => {
-      listUsers.mockResolvedValue({ data: { users: [inactive(UID1, 95), inactive(UID2, 95)] }, error: null })
-      eventRows.mockResolvedValue({ data: [
-        ...FREE_READY(UID2).map((r) => (r.event_key === 'inactive_83' ? { ...r, created_at: ago(2) } : r)),
-      ], error: null })
-      enable()
-      const body = await run({ delete: '1' })
-      expect(body.deletion).toMatchObject({ deleted: 0 })
-      expect(deleteUserSpy).not.toHaveBeenCalled()
-    })
-
-    it('skips the account if it signed in after the sweep read it (live re-check)', async () => {
-      listUsers.mockResolvedValue({ data: { users: [inactive(UID1, 95)] }, error: null })
-      getUserById.mockResolvedValue({ data: { user: { ...inactive(UID1, 95), last_sign_in_at: ago(0) } }, error: null })
-      eventRows.mockResolvedValue({ data: FREE_READY(UID1), error: null })
-      enable()
-      const body = await run({ delete: '1' })
-      expect(body.deletion).toMatchObject({ deleted: 0, skipped: 1 })
-      expect(deleteUserSpy).not.toHaveBeenCalled()
-      expect(storageRemove).not.toHaveBeenCalled()
-    })
-
-    it('skips the account if it became protected (e.g. upgraded) before deletion', async () => {
-      listUsers.mockResolvedValue({ data: { users: [inactive(UID1, 95)] }, error: null })
-      getUserById.mockResolvedValue({ data: { user: { ...inactive(UID1, 95), app_metadata: { subscription_plan: 'premium_monthly' } } }, error: null })
-      eventRows.mockResolvedValue({ data: FREE_READY(UID1), error: null })
-      enable()
-      const body = await run({ delete: '1' })
-      expect(body.deletion).toMatchObject({ deleted: 0, skipped: 1 })
-      expect(deleteUserSpy).not.toHaveBeenCalled()
-    })
-
-    it('does NOT delete the account if the audit write or media cleanup fails', async () => {
-      const u = inactive(UID1, 95)
-      listUsers.mockResolvedValue({ data: { users: [u] }, error: null })
-      getUserById.mockResolvedValue({ data: { user: u }, error: null })
-      eventRows.mockResolvedValue({ data: FREE_READY(UID1), error: null })
-      enable()
-      upsertSpy.mockResolvedValueOnce({ error: { message: 'db down' } })
-      let body = await run({ delete: '1' })
-      expect(body.deletion).toMatchObject({ deleted: 0, failed: 1 })
-      storageRemove.mockResolvedValueOnce({ error: { message: 'storage down' } })
-      storageList.mockResolvedValueOnce({ data: [{ name: 'a.png', id: 'f1' }], error: null })
-      body = await run({ delete: '1' })
-      expect(body.deletion).toMatchObject({ deleted: 0, failed: 1 })
-      expect(deleteUserSpy).not.toHaveBeenCalled()
-    })
-
-    it('refuses media cleanup for a non-uuid id (would otherwise list the whole bucket)', async () => {
-      const u = inactive('not-a-uuid', 95)
-      listUsers.mockResolvedValue({ data: { users: [u] }, error: null })
-      getUserById.mockResolvedValue({ data: { user: u }, error: null })
-      eventRows.mockResolvedValue({ data: FREE_READY('not-a-uuid'), error: null })
-      enable()
-      const body = await run({ delete: '1' })
-      expect(body.deletion).toMatchObject({ deleted: 0, failed: 1 })
-      expect(storageList).not.toHaveBeenCalled()
-      expect(deleteUserSpy).not.toHaveBeenCalled()
-    })
-
-    it('deletes at most 10 accounts per run', async () => {
-      const users = Array.from({ length: 12 }, (_, i) => inactive(`00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, 95))
-      listUsers.mockResolvedValue({ data: { users }, error: null })
-      getUserById.mockImplementation(async (id) => ({ data: { user: users.find((x) => x.id === id) }, error: null }))
-      eventRows.mockResolvedValue({ data: users.flatMap((x) => FREE_READY(x.id)), error: null })
-      enable()
-      const body = await run({ delete: '1' })
-      expect(deleteUserSpy).toHaveBeenCalledTimes(10)
-      expect(body.deletion).toMatchObject({ deleted: 10, remaining: 2 })
     })
   })
 

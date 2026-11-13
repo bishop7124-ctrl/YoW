@@ -11,6 +11,7 @@ import {
   lifecycleTrackFor,
   mayExecuteIrreversible,
 } from './_accountLifecycle.js'
+import { runDeletions } from './_accountDeletion.js'
 
 // Cron target for the cloud-expiry + inactive-account lifecycle. NOT its own Vercel Function (Hobby is capped at 12):
 // api/send-reengagement-emails.js hands off to this when called with ?job=lifecycle (see vercel.json "crons").
@@ -29,14 +30,13 @@ import {
 //   delete  — ACCOUNT_LIFECYCLE_DELETE_FREE=true   and ?delete=1
 //             Permanently deletes INACTIVE FREE accounts only (never Lifetime/paid), after the 18-month
 //             inactivity mark + 90-day grace, with the final notice recorded >= 7 days ago and no
-//             sign-in since. Writes account_lifecycle_deletions first, re-checks the account live,
-//             removes the user's stored media, then deletes the account. At most MAX_DELETES_PER_RUN.
+//             sign-in since. Two-stage (AUD-05): first HOLD (sign-in blocked, nothing deleted),
+//             then after 30 days re-check live and delete the account, then clean up leftovers
+//             (media, scenes) from the journal. At most MAX_DELETES_PER_RUN per run.
 
 const MAX_EMAILS_PER_RUN = 20
 const MAX_ARCHIVES_PER_RUN = 20
 const MAX_DELETES_PER_RUN = 10
-const MEDIA_BUCKET = 'user-media'
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const RESEND_URL = 'https://api.resend.com/emails'
 const FROM_ADDRESS = 'Your Own World <hello@yourownworld.co.uk>'
 const FINAL_NOTICE_RETRY_MS = 24 * 60 * 60 * 1000
@@ -59,33 +59,6 @@ async function listAllUsers(supabase) {
     if (data.users.length < PAGE_SIZE) break
   }
   return users
-}
-
-// Removes every stored object under `<userId>/` in the private media bucket. The uuid check
-// is a hard guard: an empty or malformed prefix would otherwise list the whole bucket.
-async function removeUserMedia(supabase, userId) {
-  if (!UUID_RE.test(String(userId))) throw new Error('refusing media cleanup for a non-uuid id')
-  const bucket = supabase.storage.from(MEDIA_BUCKET)
-  const paths = []
-  const walk = async (prefix, depth) => {
-    if (depth > 8) throw new Error('media folder tree too deep')
-    for (let offset = 0; ; offset += 100) {
-      const { data, error } = await bucket.list(prefix, { limit: 100, offset })
-      if (error) throw error
-      for (const entry of data || []) {
-        const path = `${prefix}/${entry.name}`
-        if (entry.id) paths.push(path)
-        else await walk(path, depth + 1)
-      }
-      if (!data || data.length < 100) break
-    }
-  }
-  await walk(userId, 0)
-  for (let i = 0; i < paths.length; i += 100) {
-    const { error } = await bucket.remove(paths.slice(i, i + 100))
-    if (error) throw error
-  }
-  return paths.length
 }
 
 // Best effort: a row that stays 'pending' is treated exactly like 'unknown' (it never opens the gate).
@@ -341,52 +314,8 @@ export default async function handler(req, res) {
     }
 
     if (deleteEnabled) {
-      const result = { deleted: 0, failed: 0, skipped: 0, remaining: 0 }
-      let attempts = 0
-      for (const item of deleteQueue) {
-        if (attempts >= MAX_DELETES_PER_RUN) { result.remaining += 1; continue }
-        attempts += 1
-        const id = item.user.id
-        try {
-          // Live re-check: the account must still be an inactive Free account and must not
-          // have signed in since the sweep read it. Anything else is skipped, not deleted.
-          const { data: fresh, error: freshError } = await supabase.auth.admin.getUserById(id)
-          if (freshError || !fresh?.user) throw freshError || new Error('user not found')
-          const stillFree = lifecycleTrackFor(fresh.user) === 'free_inactive'
-          const sameActivity = lastActivityAt(fresh.user)?.getTime() === item.lastActivity?.getTime()
-          if (!stillFree || !sameActivity) { result.skipped += 1; continue }
-
-          // Record FIRST (service-role-only audit table; no FK, survives the deletion).
-          const { error: auditError } = await supabase.from('account_lifecycle_deletions').upsert({
-            user_id: id,
-            track: item.track,
-            anchor_at: item.anchor ? new Date(item.anchor).toISOString() : null,
-            final_notice_sent_at: item.finalNoticeSentAt ? new Date(item.finalNoticeSentAt).toISOString() : null,
-          }, { onConflict: 'user_id' })
-          if (auditError) throw auditError
-
-          await removeUserMedia(supabase, id)
-          // public.scenes.user_id is TEXT with no foreign key to auth.users, so deleting the
-          // Auth user does not cascade to it (every other user table does): remove the
-          // manuscript text explicitly or it would outlive the account.
-          const { error: scenesError } = await supabase.from('scenes').delete().eq('user_id', id)
-          if (scenesError) throw scenesError
-          const { error: deleteError } = await supabase.auth.admin.deleteUser(id)
-          if (deleteError) throw deleteError
-          result.deleted += 1
-          const { error: doneError } = await supabase
-            .from('account_lifecycle_deletions')
-            .update({ completed_at: new Date().toISOString() })
-            .eq('user_id', id)
-          if (doneError) console.error('[run-account-lifecycle] deletion audit completion failed', doneError.message)
-        } catch (deleteErr) {
-          // Nothing is half-done in a way that loses data: media removal happens just before the
-          // account delete, and the next run retries from the audit row.
-          console.error('[run-account-lifecycle] deletion failed', id, deleteErr?.message)
-          result.failed += 1
-        }
-      }
-      body.deletion = { ...result, maxPerRun: MAX_DELETES_PER_RUN }
+      // AUD-05: hold -> (30 days) -> purge -> cleanup; see api/_accountDeletion.js.
+      body.deletion = { ...(await runDeletions(supabase, deleteQueue, { now, maxPerRun: MAX_DELETES_PER_RUN })), maxPerRun: MAX_DELETES_PER_RUN }
     }
 
     // Counts only (no ids, no emails) so the run result is visible in Vercel's logs.
